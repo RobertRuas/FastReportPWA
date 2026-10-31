@@ -1,0 +1,27 @@
+/* PrimeVue component overrides to match design system */
+
+.p-button {
+  height: var(--button-height);
+  font-size: var(--font-size-sm);
+  border-radius: var(--radius-md);
+}
+
+.p-inputtext,
+.p-textarea,
+.p-select,
+.p-datepicker,
+.p-autocomplete {
+  border-radius: var(--radius-md);
+}
+
+.p-toast {
+  z-index: var(--z-toast) !important;
+}
+
+.p-dialog-mask {
+  z-index: var(--z-dialog) !important;
+}
+
+.p-confirmdialog {
+  z-index: var(--z-dialog) !important;
+}

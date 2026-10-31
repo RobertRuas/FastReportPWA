@@ -1,0 +1,642 @@
+{
+  "id": "tendons-retrofit",
+  "version": 1,
+  "name": {
+    "pt": "Retrofit de tendões",
+    "en": "Tendons Retrofit"
+  },
+  "fileNamePattern": "{project}_{slot}_{index}.jpeg",
+  "inboxFolder": "Inbox",
+  "slots": [
+    {
+      "id": "inbox",
+      "folder": "Inbox",
+      "hotkeys": [],
+      "expectedCount": null,
+      "unlimited": true,
+      "isTrash": false,
+      "isInbox": true
+    },
+    {
+      "id": "general",
+      "folder": "General",
+      "hotkeys": [
+        "0",
+        "g"
+      ],
+      "expectedCount": null,
+      "unlimited": true,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "trash",
+      "folder": "Trash",
+      "hotkeys": [
+        "cmd+backspace"
+      ],
+      "expectedCount": null,
+      "unlimited": true,
+      "isTrash": true,
+      "isInbox": false
+    },
+    {
+      "id": "c12",
+      "folder": "C12",
+      "hotkeys": [
+        "12"
+      ],
+      "expectedCount": null,
+      "unlimited": true,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c25",
+      "folder": "C25",
+      "hotkeys": [
+        "25"
+      ],
+      "expectedCount": null,
+      "unlimited": true,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c12-t01",
+      "folder": "T01",
+      "group": "C12",
+      "hotkeys": [
+        "1"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c12-t02",
+      "folder": "T02",
+      "group": "C12",
+      "hotkeys": [
+        "2"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c12-t03",
+      "folder": "T03",
+      "group": "C12",
+      "hotkeys": [
+        "3"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c12-t04",
+      "folder": "T04",
+      "group": "C12",
+      "hotkeys": [
+        "4"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c12-t05",
+      "folder": "T05",
+      "group": "C12",
+      "hotkeys": [
+        "5"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c12-t06",
+      "folder": "T06",
+      "group": "C12",
+      "hotkeys": [
+        "6"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c12-t07",
+      "folder": "T07",
+      "group": "C12",
+      "hotkeys": [
+        "7"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c12-t08",
+      "folder": "T08",
+      "group": "C12",
+      "hotkeys": [
+        "8"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c12-t09",
+      "folder": "T09",
+      "group": "C12",
+      "hotkeys": [
+        "9"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c12-t10",
+      "folder": "T10",
+      "group": "C12",
+      "hotkeys": [
+        "10"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c12-t11",
+      "folder": "T11",
+      "group": "C12",
+      "hotkeys": [
+        "11"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c12-t12",
+      "folder": "T12",
+      "group": "C12",
+      "hotkeys": [
+        "12"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c12-t13",
+      "folder": "T13",
+      "group": "C12",
+      "hotkeys": [
+        "13"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c12-t14",
+      "folder": "T14",
+      "group": "C12",
+      "hotkeys": [
+        "14"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c12-t15",
+      "folder": "T15",
+      "group": "C12",
+      "hotkeys": [
+        "15"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c12-t16",
+      "folder": "T16",
+      "group": "C12",
+      "hotkeys": [
+        "16"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c12-t17",
+      "folder": "T17",
+      "group": "C12",
+      "hotkeys": [
+        "17"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c12-t18",
+      "folder": "T18",
+      "group": "C12",
+      "hotkeys": [
+        "18"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c12-t19",
+      "folder": "T19",
+      "group": "C12",
+      "hotkeys": [
+        "19"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c12-t20",
+      "folder": "T20",
+      "group": "C12",
+      "hotkeys": [
+        "20"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c12-t21",
+      "folder": "T21",
+      "group": "C12",
+      "hotkeys": [
+        "21"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c12-t22",
+      "folder": "T22",
+      "group": "C12",
+      "hotkeys": [
+        "22"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c12-t23",
+      "folder": "T23",
+      "group": "C12",
+      "hotkeys": [
+        "23"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c12-t24",
+      "folder": "T24",
+      "group": "C12",
+      "hotkeys": [
+        "24"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c25-t01",
+      "folder": "T01",
+      "group": "C25",
+      "hotkeys": [
+        "1"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c25-t02",
+      "folder": "T02",
+      "group": "C25",
+      "hotkeys": [
+        "2"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c25-t03",
+      "folder": "T03",
+      "group": "C25",
+      "hotkeys": [
+        "3"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c25-t04",
+      "folder": "T04",
+      "group": "C25",
+      "hotkeys": [
+        "4"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c25-t05",
+      "folder": "T05",
+      "group": "C25",
+      "hotkeys": [
+        "5"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c25-t06",
+      "folder": "T06",
+      "group": "C25",
+      "hotkeys": [
+        "6"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c25-t07",
+      "folder": "T07",
+      "group": "C25",
+      "hotkeys": [
+        "7"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c25-t08",
+      "folder": "T08",
+      "group": "C25",
+      "hotkeys": [
+        "8"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c25-t09",
+      "folder": "T09",
+      "group": "C25",
+      "hotkeys": [
+        "9"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c25-t10",
+      "folder": "T10",
+      "group": "C25",
+      "hotkeys": [
+        "10"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c25-t11",
+      "folder": "T11",
+      "group": "C25",
+      "hotkeys": [
+        "11"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c25-t12",
+      "folder": "T12",
+      "group": "C25",
+      "hotkeys": [
+        "12"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c25-t13",
+      "folder": "T13",
+      "group": "C25",
+      "hotkeys": [
+        "13"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c25-t14",
+      "folder": "T14",
+      "group": "C25",
+      "hotkeys": [
+        "14"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c25-t15",
+      "folder": "T15",
+      "group": "C25",
+      "hotkeys": [
+        "15"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c25-t16",
+      "folder": "T16",
+      "group": "C25",
+      "hotkeys": [
+        "16"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c25-t17",
+      "folder": "T17",
+      "group": "C25",
+      "hotkeys": [
+        "17"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c25-t18",
+      "folder": "T18",
+      "group": "C25",
+      "hotkeys": [
+        "18"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c25-t19",
+      "folder": "T19",
+      "group": "C25",
+      "hotkeys": [
+        "19"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c25-t20",
+      "folder": "T20",
+      "group": "C25",
+      "hotkeys": [
+        "20"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c25-t21",
+      "folder": "T21",
+      "group": "C25",
+      "hotkeys": [
+        "21"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c25-t22",
+      "folder": "T22",
+      "group": "C25",
+      "hotkeys": [
+        "22"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c25-t23",
+      "folder": "T23",
+      "group": "C25",
+      "hotkeys": [
+        "23"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c25-t24",
+      "folder": "T24",
+      "group": "C25",
+      "hotkeys": [
+        "24"
+      ],
+      "expectedCount": 7,
+      "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    }
+  ]
+}
