@@ -37,15 +37,17 @@ export async function exportAndEmailLink(
 
     if (signError || !signedData?.signedUrl) throw new Error(signError?.message ?? 'Failed to create download link')
 
-    const pageUrl = buildDownloadPageUrl(signedData.signedUrl, project.name)
+    const downloadPageUrl = buildDownloadPageUrl(signedData.signedUrl, project.name)
 
-    const subject = encodeURIComponent(`FastReport: Download "${project.name}"`)
-    const body = encodeURIComponent(
-      `O projeto "${project.name}" está pronto para download.\n\n` +
-      `${pageUrl}\n\n` +
-      `Este link expira em 1 hora.`
-    )
-    window.location.href = `mailto:${email}?subject=${subject}&body=${body}`
+    const { error: fnError } = await supabase.functions.invoke('send-export-link', {
+      body: {
+        downloadUrl: downloadPageUrl,
+        email,
+        projectName: project.name
+      }
+    })
+
+    if (fnError) throw new Error(fnError.message)
 
     return { ok: true }
   } catch (err: any) {
