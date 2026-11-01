@@ -1,11 +1,5 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
-const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')!
 const FROM_EMAIL = Deno.env.get('FROM_EMAIL') || 'FastReport <noreply@fastreport.app>'
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') {
@@ -13,24 +7,14 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { filePath, email, projectName } = await req.json()
+    const { downloadUrl, email, projectName } = await req.json()
 
-    if (!filePath || !email || !projectName) {
+    if (!downloadUrl || !email || !projectName) {
       return new Response(
-        JSON.stringify({ error: 'Missing filePath, email, or projectName' }),
+        JSON.stringify({ error: 'Missing downloadUrl, email, or projectName' }),
         { status: 400 }
       )
     }
-
-    const { data: signedUrl, error: signError } = await supabase.storage
-      .from('fr-exports')
-      .createSignedUrl(filePath, 3600)
-
-    if (signError || !signedUrl) {
-      throw new Error(signError?.message ?? 'Failed to create signed URL')
-    }
-
-    const downloadUrl = signedUrl.signedUrl
 
     const emailRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -66,7 +50,7 @@ Deno.serve(async (req: Request) => {
       throw new Error(`Resend error: ${errBody}`)
     }
 
-    return new Response(JSON.stringify({ ok: true, downloadUrl }), { status: 200 })
+    return new Response(JSON.stringify({ ok: true }), { status: 200 })
   } catch (err) {
     console.error('Send export link error:', err)
     return new Response(
