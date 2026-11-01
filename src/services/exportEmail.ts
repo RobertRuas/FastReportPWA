@@ -39,15 +39,14 @@ export async function exportAndEmailLink(
 
     const downloadPageUrl = buildDownloadPageUrl(signedData.signedUrl, project.name)
 
-    const { error: fnError } = await supabase.functions.invoke('send-export-link', {
-      body: {
-        downloadUrl: downloadPageUrl,
-        email,
-        projectName: project.name
-      }
+    const { data, error: rpcError } = await supabase.rpc('fr_send_export_email', {
+      p_download_url: downloadPageUrl,
+      p_email: email,
+      p_project_name: project.name
     })
 
-    if (fnError) throw new Error(fnError.message)
+    if (rpcError) throw new Error(rpcError.message)
+    if (data && !data.ok) throw new Error(data.error || 'Email send failed')
 
     return { ok: true }
   } catch (err: any) {
