@@ -12,9 +12,8 @@ import { usePhotoStore } from '@/composables/usePhotoStore'
 import { useI18n } from '@/composables/useI18n'
 import { isProjectSynced } from '@/composables/useProjectSyncMap'
 import { exportProject, shareOrSave, type ExportLayout } from '@/services/exportService'
-import { exportAndEmailLink } from '@/services/exportEmail'
+import { exportAndShareLink } from '@/services/exportEmail'
 import { syncSingleProject, syncDeleteProject } from '@/services/projectSync'
-import { useAuth } from '@/composables/useAuth'
 import ProjectTabs from '@/components/common/ProjectTabs.vue'
 
 const route = useRoute()
@@ -28,7 +27,6 @@ const { importPhotos } = usePhotoImport()
 const { project, map, stats, openProject, closeProject } = useProjectSession()
 const { markExported, removeProject } = useProjects()
 const { revokeAllUrls } = usePhotoStore()
-const { currentUser } = useAuth()
 
 const projectId = computed(() => route.params.id as string)
 const syncing = ref(false)
@@ -90,13 +88,8 @@ async function doExport(layout: ExportLayout) {
   }
 }
 
-async function doExportEmail() {
+async function doExportShare() {
   if (!project.value || emailExporting.value) return
-  const email = currentUser.value?.email
-  if (!email) {
-    toast.add({ severity: 'warn', summary: t('export.emailNoUser'), life: 3000 })
-    return
-  }
 
   emailExporting.value = true
   exporting.value = true
@@ -104,7 +97,7 @@ async function doExportEmail() {
   exportTotal.value = stats.value.sorted
 
   try {
-    const result = await exportAndEmailLink(project.value, email, (p) => {
+    const result = await exportAndShareLink(project.value, (p) => {
       exportProgress.value = p.current
       exportTotal.value = p.total
     })
@@ -112,13 +105,13 @@ async function doExportEmail() {
     if (result.ok) {
       markExported(project.value)
       showExportModal.value = false
-      toast.add({ severity: 'success', summary: t('export.emailSent'), life: 4000 })
+      toast.add({ severity: 'success', summary: t('export.shareSuccess'), life: 4000 })
     } else {
-      toast.add({ severity: 'error', summary: t('export.emailError'), detail: result.error, life: 5000 })
+      toast.add({ severity: 'error', summary: t('export.shareError'), detail: result.error, life: 5000 })
     }
   } catch (err: any) {
-    console.error('[FastReport] Email export failed:', err)
-    toast.add({ severity: 'error', summary: t('export.emailError'), life: 5000 })
+    console.error('[FastReport] Share export failed:', err)
+    toast.add({ severity: 'error', summary: t('export.shareError'), life: 5000 })
   } finally {
     emailExporting.value = false
     exporting.value = false
@@ -292,13 +285,13 @@ setActions([
                 <i class="pi pi-chevron-right export-option-arrow"></i>
               </button>
 
-              <button class="export-option" @click="doExportEmail">
-                <span class="export-option-icon export-option-icon-email">
-                  <i class="pi pi-envelope"></i>
+              <button class="export-option" @click="doExportShare">
+                <span class="export-option-icon export-option-icon-share">
+                  <i class="pi pi-share-alt"></i>
                 </span>
                 <div class="export-option-text">
-                  <span class="export-option-label">{{ t('export.emailLink') }}</span>
-                  <span class="export-option-hint">{{ t('export.emailLinkHint') }}</span>
+                  <span class="export-option-label">{{ t('export.shareLink') }}</span>
+                  <span class="export-option-hint">{{ t('export.shareLinkHint') }}</span>
                 </div>
                 <i class="pi pi-chevron-right export-option-arrow"></i>
               </button>
@@ -596,7 +589,7 @@ setActions([
   flex-shrink: 0;
 }
 
-.export-option-icon-email {
+.export-option-icon-share {
   background: #3B82F6;
 }
 

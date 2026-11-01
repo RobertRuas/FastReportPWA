@@ -8,9 +8,8 @@ function buildDownloadPageUrl(signedUrl: string, projectName: string): string {
   return `${base}#/download?${params.toString()}`
 }
 
-export async function exportAndEmailLink(
+export async function exportAndShareLink(
   project: Project,
-  email: string,
   onProgress?: (p: { current: number; total: number }) => void
 ): Promise<{ ok: boolean; error?: string }> {
   const { data: { user } } = await supabase.auth.getUser()
@@ -39,17 +38,19 @@ export async function exportAndEmailLink(
 
     const downloadPageUrl = buildDownloadPageUrl(signedData.signedUrl, project.name)
 
-    const { data, error: rpcError } = await supabase.rpc('fr_send_export_email', {
-      p_download_url: downloadPageUrl,
-      p_email: email,
-      p_project_name: project.name
-    })
-
-    if (rpcError) throw new Error(rpcError.message)
-    if (data && !data.ok) throw new Error(data.error || 'Email send failed')
+    if (navigator.share) {
+      await navigator.share({
+        title: `FastReport: ${project.name}`,
+        text: `Download do projeto "${project.name}" — link válido por 1 hora.`,
+        url: downloadPageUrl
+      })
+    } else {
+      await navigator.clipboard.writeText(downloadPageUrl)
+    }
 
     return { ok: true }
   } catch (err: any) {
-    return { ok: false, error: err?.message ?? 'Export email failed' }
+    if (err?.name === 'AbortError') return { ok: true }
+    return { ok: false, error: err?.message ?? 'Export failed' }
   }
 }
