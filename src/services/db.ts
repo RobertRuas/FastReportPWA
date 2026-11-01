@@ -181,7 +181,8 @@ const SETTINGS_DEFAULTS: AppSettings = {
   langPref: 'auto',
   ui: 1,
   userName: '',
-  userEmail: ''
+  userEmail: '',
+  autoSync: false
 }
 
 export async function getSettings(): Promise<AppSettings> {

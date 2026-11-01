@@ -7,7 +7,8 @@ const defaults: AppSettings = {
   langPref: 'auto',
   ui: 1,
   userName: '',
-  userEmail: ''
+  userEmail: '',
+  autoSync: false
 }
 
 const settings = reactive<AppSettings>({ ...defaults })

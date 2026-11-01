@@ -11,7 +11,7 @@
 html {
   height: 100%;
   -webkit-text-size-adjust: 100%;
-  touch-action: pan-x pan-y;
+  touch-action: manipulation;
   background-color: var(--color-header-bg);
 }
 
@@ -26,7 +26,7 @@ body {
   overflow: hidden;
   -webkit-user-select: none;
   user-select: none;
-  touch-action: pan-x pan-y;
+  touch-action: manipulation;
 }
 
 #app {

@@ -2,21 +2,25 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
-import Tag from 'primevue/tag'
+import { useConfirm } from 'primevue/useconfirm'
 import ProgressBar from 'primevue/progressbar'
 import { useProjects } from '@/composables/useProjects'
 import { useI18n } from '@/composables/useI18n'
-import { isProjectSynced, useProjectSyncMap } from '@/composables/useProjectSyncMap'
+import { isProjectSynced } from '@/composables/useProjectSyncMap'
+import { syncSingleProject, syncDeleteProject } from '@/services/projectSync'
 import { getAllMaps, getMap } from '@/services/mapCatalog'
 import { importZip } from '@/services/zipImportService'
+import SwipeActions from '@/components/common/SwipeActions.vue'
+import type { SwipeAction } from '@/components/common/SwipeActions.vue'
 import * as db from '@/services/db'
 
 const router = useRouter()
 const toast = useToast()
+const confirm = useConfirm()
 const { t, lang } = useI18n()
-const { projects, projectStats, totalBytes } = useProjects()
-const { syncMap } = useProjectSyncMap()
+const { projects, projectStats, totalBytes, removeProject } = useProjects()
 const importing = ref(false)
+const syncingId = ref('')
 
 const storageUsed = ref(0)
 
@@ -36,10 +40,10 @@ const pendingCount = computed(() =>
 )
 
 const cards = computed(() => [
-  { key: 'projects', title: t('home.summary.projects'), icon: 'pi pi-folder', count: projects.value.length, route: null },
-  { key: 'maps', title: t('home.summary.maps'), icon: 'pi pi-th-large', count: mapsCount, route: '/maps' },
-  { key: 'exported', title: t('home.summary.exported'), icon: 'pi pi-check-circle', count: exportedCount.value, route: null },
-  { key: 'pending', title: t('home.summary.pending'), icon: 'pi pi-clock', count: pendingCount.value, route: null }
+  { key: 'projects', title: t('home.summary.projects'), icon: 'pi pi-folder', count: projects.value.length, color: '#3B82F6', route: '/projects/list' },
+  { key: 'maps', title: t('home.summary.maps'), icon: 'pi pi-th-large', count: mapsCount, color: '#8B5CF6', route: '/maps' },
+  { key: 'exported', title: t('home.summary.exported'), icon: 'pi pi-check-circle', count: exportedCount.value, color: '#10B981', route: '/projects/list?filter=exported' },
+  { key: 'pending', title: t('home.summary.pending'), icon: 'pi pi-clock', count: pendingCount.value, color: '#F59E0B', route: '/projects/list?filter=pending' }
 ])
 
 const sortedProjects = computed(() =>
@@ -59,10 +63,10 @@ function formatDate(iso: string): string {
   const now = new Date()
   const diff = now.getTime() - d.getTime()
   const days = Math.floor(diff / 86400000)
-  const locale = lang.value === 'pt' ? 'pt-PT' : 'en-GB'
   if (days === 0) return lang.value === 'pt' ? 'Hoje' : 'Today'
   if (days === 1) return lang.value === 'pt' ? 'Ontem' : 'Yesterday'
   if (days < 7) return lang.value === 'pt' ? `${days} dias` : `${days} days`
+  const locale = lang.value === 'pt' ? 'pt-PT' : 'en-GB'
   return d.toLocaleDateString(locale, { day: 'numeric', month: 'short' })
 }
 
@@ -85,6 +89,61 @@ function thumbColor(name: string): string {
   let hash = 0
   for (const ch of name) hash = ch.charCodeAt(0) + ((hash << 5) - hash)
   return colors[Math.abs(hash) % colors.length]
+}
+
+function getSwipeActions(project: typeof projects.value[0]): SwipeAction[] {
+  return [
+    {
+      icon: 'pi pi-sync',
+      label: t('sync.syncNow'),
+      color: '#3B82F6',
+      handler: () => onSyncProject(project)
+    },
+    {
+      icon: 'pi pi-pencil',
+      label: t('project.actions.edit'),
+      color: '#F59E0B',
+      handler: () => router.push(`/projects/${project.id}`)
+    },
+    {
+      icon: 'pi pi-trash',
+      label: t('app.delete'),
+      color: '#EF4444',
+      handler: () => onDeleteProject(project)
+    }
+  ]
+}
+
+async function onSyncProject(project: typeof projects.value[0]) {
+  syncingId.value = project.id
+  const result = await syncSingleProject(project)
+  syncingId.value = ''
+  if (result.ok) {
+    toast.add({ severity: 'success', summary: t('sync.syncSuccess'), life: 2000 })
+  } else {
+    toast.add({ severity: 'error', summary: t('sync.syncError'), detail: result.error, life: 4000 })
+  }
+}
+
+function onDeleteProject(project: typeof projects.value[0]) {
+  const isExported = !!project.exportedAt
+  const msg = isExported
+    ? t('delete.message', { name: project.name })
+    : t('delete.messageUnexported')
+
+  confirm.require({
+    message: msg,
+    header: t('delete.title'),
+    icon: 'pi pi-exclamation-triangle',
+    acceptLabel: t('delete.accept'),
+    rejectLabel: t('app.cancel'),
+    acceptClass: 'p-button-danger',
+    accept: async () => {
+      await syncDeleteProject(project.id)
+      await removeProject(project.id)
+      toast.add({ severity: 'info', summary: t('delete.success'), life: 2000 })
+    }
+  })
 }
 
 async function onImportZip() {
@@ -118,22 +177,20 @@ async function onImportZip() {
   <div class="home-page">
 
     <div class="cards-grid">
-      <component
-        :is="card.route ? 'button' : 'div'"
+      <button
         v-for="card in cards"
         :key="card.key"
         class="summary-card"
-        :class="{ 'summary-card-action': card.route }"
-        @click="card.route && router.push(card.route)"
+        @click="router.push(card.route)"
       >
         <div class="card-top">
-          <span class="card-icon">
+          <span class="card-icon" :style="{ background: card.color + '18', color: card.color }">
             <i :class="card.icon"></i>
           </span>
           <span class="card-count">{{ card.count }}</span>
         </div>
         <span class="card-title">{{ card.title }}</span>
-      </component>
+      </button>
     </div>
 
     <template v-if="sortedProjects.length > 0">
@@ -142,42 +199,50 @@ async function onImportZip() {
       </div>
 
       <div class="project-list">
-        <button
+        <SwipeActions
           v-for="project in sortedProjects"
           :key="project.id"
-          class="project-item"
-          @click="router.push(`/projects/${project.id}`)"
+          :actions="getSwipeActions(project)"
         >
-          <span class="project-thumb" :style="{ background: thumbColor(project.name) }">
-            <i class="pi pi-folder-open"></i>
-          </span>
-          <div class="project-info">
-            <span class="project-name">{{ project.name }}</span>
-            <span class="project-meta">
-              {{ mapName(project.mapId) }} · {{ formatDate(project.updatedAt) }}
+          <button
+            class="project-item"
+            @click="router.push(`/projects/${project.id}`)"
+          >
+            <span class="project-thumb" :style="{ background: thumbColor(project.name) }">
+              <i class="pi pi-folder-open"></i>
             </span>
-            <div class="project-progress-row">
-              <ProgressBar
-                :value="projectProgress(project)"
-                :showValue="false"
-                class="project-bar"
-              />
-              <span class="project-photo-count">
-                {{ projectStats(project).sorted }}/{{ projectStats(project).total }}
+            <div class="project-info">
+              <span class="project-name">{{ project.name }}</span>
+              <span class="project-meta">
+                {{ mapName(project.mapId) }} · {{ formatDate(project.updatedAt) }}
               </span>
+              <div class="project-progress-row">
+                <ProgressBar
+                  :value="projectProgress(project)"
+                  :showValue="false"
+                  class="project-bar"
+                />
+                <span class="project-photo-count">
+                  {{ projectStats(project).sorted }}/{{ projectStats(project).total }}
+                </span>
+              </div>
             </div>
-          </div>
-          <div class="project-end">
-            <span
-              class="project-sync-dot"
-              :class="isProjectSynced(project.id, project.updatedAt) ? 'project-sync-dot-synced' : 'project-sync-dot-pending'"
-              :title="isProjectSynced(project.id, project.updatedAt) ? t('sync.project.synced') : t('sync.project.notSynced')"
-            >
-              <i :class="isProjectSynced(project.id, project.updatedAt) ? 'pi pi-cloud' : 'pi pi-cloud-upload'"></i>
-            </span>
-            <i class="pi pi-chevron-right project-arrow"></i>
-          </div>
-        </button>
+            <div class="project-end">
+              <i
+                v-if="syncingId === project.id"
+                class="pi pi-spin pi-spinner project-sync-icon"
+              ></i>
+              <span
+                v-else
+                class="project-sync-dot"
+                :class="isProjectSynced(project.id, project.updatedAt) ? 'project-sync-dot-synced' : 'project-sync-dot-pending'"
+              >
+                <i :class="isProjectSynced(project.id, project.updatedAt) ? 'pi pi-cloud' : 'pi pi-cloud-upload'"></i>
+              </span>
+              <i class="pi pi-chevron-right project-arrow"></i>
+            </div>
+          </button>
+        </SwipeActions>
       </div>
     </template>
 
@@ -218,7 +283,7 @@ async function onImportZip() {
 .cards-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--spacing-md);
+  gap: var(--spacing-sm);
 }
 
 .summary-card {
@@ -229,7 +294,14 @@ async function onImportZip() {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   padding: var(--spacing-md);
-  min-height: 90px;
+  min-height: 80px;
+  cursor: pointer;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.summary-card:active {
+  background: var(--color-border);
 }
 
 .card-top {
@@ -242,17 +314,15 @@ async function onImportZip() {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
-  background: var(--color-border);
-  color: var(--color-text-secondary);
-  font-size: 14px;
+  font-size: 13px;
   flex-shrink: 0;
 }
 
 .card-count {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 700;
   color: var(--color-text-primary);
   line-height: 1;
@@ -262,17 +332,7 @@ async function onImportZip() {
   font-size: var(--font-size-xs);
   font-weight: 500;
   color: var(--color-text-secondary);
-  margin-top: var(--spacing-sm);
-}
-
-.summary-card-action {
-  cursor: pointer;
-  text-align: left;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.summary-card-action:active {
-  background: var(--color-border);
+  margin-top: var(--spacing-xs);
 }
 
 /* --- List Header --- */
@@ -301,19 +361,20 @@ async function onImportZip() {
   display: flex;
   align-items: center;
   gap: var(--spacing-md);
-  padding: var(--spacing-md) var(--spacing-lg);
-  background: transparent;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--color-bg-secondary);
   border: none;
   cursor: pointer;
   text-align: left;
   -webkit-tap-highlight-color: transparent;
+  width: 100%;
 }
 
 .project-item:active {
   background: var(--color-border);
 }
 
-.project-item + .project-item {
+.project-list > :deep(.swipe-container + .swipe-container .project-item) {
   border-top: 1px solid var(--color-border);
 }
 
@@ -321,18 +382,18 @@ async function onImportZip() {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   border-radius: var(--radius-sm);
   flex-shrink: 0;
   color: #fff;
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .project-info {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
   flex: 1;
   min-width: 0;
 }
@@ -378,6 +439,11 @@ async function onImportZip() {
   align-items: center;
   gap: var(--spacing-sm);
   flex-shrink: 0;
+}
+
+.project-sync-icon {
+  font-size: 14px;
+  color: var(--color-text-secondary);
 }
 
 .project-sync-dot {

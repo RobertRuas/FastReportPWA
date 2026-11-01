@@ -5,6 +5,7 @@ import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
+import ToggleSwitch from 'primevue/toggleswitch'
 import JSZip from 'jszip'
 import { useSettings } from '@/composables/useSettings'
 import { useProjects } from '@/composables/useProjects'
@@ -15,11 +16,7 @@ import { exportProject } from '@/services/exportService'
 import { syncProjects } from '@/services/projectSync'
 import { stopSettingsSync } from '@/services/settingsSync'
 import { resetSyncState } from '@/composables/useSyncStatus'
-import {
-  isAdmin, ADMIN_EMAIL,
-  listAllowedUsers, addAllowedUser, revokeUser, reinstateUser, deleteAllowedUser,
-  type AccessEntry
-} from '@/services/accessService'
+import { isAdmin } from '@/services/accessService'
 import * as db from '@/services/db'
 
 const router = useRouter()
@@ -34,16 +31,14 @@ const { syncState, syncedTimeAgo, syncErrorMsg } = useSyncStatus()
 const profileName = ref('')
 const profileEmail = ref('')
 const savingProfile = ref(false)
-
 const syncing = ref(false)
 const showAdmin = computed(() => isAdmin(currentUser.value?.email))
-const accessUsers = ref<AccessEntry[]>([])
-const newUserEmail = ref('')
-const addingUser = ref(false)
-
 const storageUsed = ref(0)
 const storageQuota = ref(0)
 const backingUp = ref(false)
+
+const profileOpen = ref(false)
+const prefsOpen = ref(false)
 
 onMounted(async () => {
   profileName.value = currentUser.value?.name ?? settings.userName
@@ -52,9 +47,6 @@ onMounted(async () => {
   if (est) {
     storageUsed.value = est.used
     storageQuota.value = est.quota
-  }
-  if (showAdmin.value) {
-    accessUsers.value = await listAllowedUsers()
   }
 })
 
@@ -98,16 +90,13 @@ async function onBackup() {
     toast.add({ severity: 'warn', summary: t('settings.backupEmpty'), life: 2000 })
     return
   }
-
   backingUp.value = true
   try {
     const masterZip = new JSZip()
-
     for (const project of projects.value) {
       const projectBlob = await exportProject(project, 'folders')
       masterZip.file(`${project.slug || project.name}.zip`, projectBlob)
     }
-
     const blob = await masterZip.generateAsync({ type: 'blob' })
     const date = new Date().toISOString().slice(0, 10)
     const filename = `fastreport-backup-${date}.zip`
@@ -156,77 +145,6 @@ async function onBackup() {
   } finally {
     backingUp.value = false
   }
-}
-
-async function onAddUser() {
-  const email = newUserEmail.value.trim().toLowerCase()
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return
-  addingUser.value = true
-  const result = await addAllowedUser(email)
-  addingUser.value = false
-  if (result.error) {
-    toast.add({ severity: 'error', summary: result.error, life: 3000 })
-    return
-  }
-  newUserEmail.value = ''
-  accessUsers.value = await listAllowedUsers()
-  toast.add({ severity: 'success', summary: t('access.added'), life: 2000 })
-}
-
-function onRevokeUser(email: string) {
-  confirm.require({
-    message: t('access.confirmRevoke').replace('{email}', email),
-    header: t('access.revoke'),
-    icon: 'pi pi-ban',
-    acceptLabel: t('access.revoke'),
-    rejectLabel: t('app.cancel'),
-    acceptClass: 'p-button-danger',
-    accept: async () => {
-      await revokeUser(email)
-      accessUsers.value = await listAllowedUsers()
-      toast.add({ severity: 'warn', summary: t('access.revokedSuccess'), life: 2000 })
-    }
-  })
-}
-
-async function onReinstateUser(email: string) {
-  await reinstateUser(email)
-  accessUsers.value = await listAllowedUsers()
-  toast.add({ severity: 'success', summary: t('access.reinstated'), life: 2000 })
-}
-
-function onDeleteUser(email: string) {
-  confirm.require({
-    message: t('access.confirmDelete').replace('{email}', email),
-    header: t('access.delete'),
-    icon: 'pi pi-exclamation-triangle',
-    acceptLabel: t('access.delete'),
-    rejectLabel: t('app.cancel'),
-    acceptClass: 'p-button-danger',
-    accept: async () => {
-      await deleteAllowedUser(email)
-      accessUsers.value = await listAllowedUsers()
-      toast.add({ severity: 'info', summary: t('access.deleted'), life: 2000 })
-    }
-  })
-}
-
-function formatLastAccess(dateStr: string | null): string {
-  if (!dateStr) return t('access.never')
-  const d = new Date(dateStr)
-  return d.toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit', year: '2-digit' }) +
-    ' ' + d.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })
-}
-
-function shortDevice(ua: string | null): string {
-  if (!ua) return '—'
-  if (ua.includes('iPhone')) return 'iPhone'
-  if (ua.includes('iPad')) return 'iPad'
-  if (ua.includes('Android')) return 'Android'
-  if (ua.includes('Mac')) return 'Mac'
-  if (ua.includes('Windows')) return 'Windows'
-  if (ua.includes('Linux')) return 'Linux'
-  return 'Browser'
 }
 
 async function onSyncNow() {
@@ -281,58 +199,68 @@ function onResetAll() {
 <template>
   <div class="settings-page">
 
-    <!-- Profile -->
+    <!-- Profile (collapsible) -->
     <section class="section">
-      <h2 class="section-title">{{ t('settings.profile') }}</h2>
-      <div class="card">
-        <div class="profile-field">
-          <label class="profile-label">{{ t('settings.userName') }}</label>
-          <InputText
-            v-model="profileName"
-            :placeholder="t('settings.userNamePlaceholder')"
-            class="profile-input"
-          />
+      <button class="section-toggle" @click="profileOpen = !profileOpen">
+        <span class="section-title">{{ t('settings.profile') }}</span>
+        <i class="pi section-chevron" :class="profileOpen ? 'pi-chevron-up' : 'pi-chevron-down'"></i>
+      </button>
+      <Transition name="collapse">
+        <div v-if="profileOpen" class="section-body">
+          <div class="card">
+            <div class="profile-field">
+              <label class="profile-label">{{ t('settings.userName') }}</label>
+              <InputText
+                v-model="profileName"
+                :placeholder="t('settings.userNamePlaceholder')"
+                class="profile-input"
+              />
+            </div>
+            <div class="profile-field">
+              <label class="profile-label">{{ t('settings.userEmail') }}</label>
+              <InputText
+                v-model="profileEmail"
+                type="email"
+                disabled
+                class="profile-input"
+              />
+            </div>
+            <button class="save-btn" :disabled="savingProfile" @click="saveProfile">
+              <i :class="savingProfile ? 'pi pi-spin pi-spinner' : 'pi pi-check'"></i>
+              {{ t('app.save') }}
+            </button>
+          </div>
         </div>
-        <div class="profile-field">
-          <label class="profile-label">{{ t('settings.userEmail') }}</label>
-          <InputText
-            v-model="profileEmail"
-            type="email"
-            disabled
-            class="profile-input"
-          />
-        </div>
-        <p class="card-hint">
-          <i class="pi pi-info-circle"></i>
-          {{ t('settings.profileHint') }}
-        </p>
-        <button class="save-btn" :disabled="savingProfile" @click="saveProfile">
-          <i :class="savingProfile ? 'pi pi-spin pi-spinner' : 'pi pi-check'"></i>
-          {{ t('app.save') }}
-        </button>
-      </div>
+      </Transition>
     </section>
 
-    <!-- Preferences -->
+    <!-- Preferences (collapsible) -->
     <section class="section">
-      <h2 class="section-title">{{ t('settings.preferences') }}</h2>
-      <div class="card">
-        <div class="row-between">
-          <span class="row-label">{{ t('settings.language') }}</span>
-          <Select
-            v-model="settings.langPref"
-            :options="langOptions"
-            optionLabel="label"
-            optionValue="value"
-            class="lang-select"
-          />
+      <button class="section-toggle" @click="prefsOpen = !prefsOpen">
+        <span class="section-title">{{ t('settings.preferences') }}</span>
+        <i class="pi section-chevron" :class="prefsOpen ? 'pi-chevron-up' : 'pi-chevron-down'"></i>
+      </button>
+      <Transition name="collapse">
+        <div v-if="prefsOpen" class="section-body">
+          <div class="card">
+            <div class="row-between">
+              <span class="row-label">{{ t('settings.language') }}</span>
+              <Select
+                v-model="settings.langPref"
+                :options="langOptions"
+                optionLabel="label"
+                optionValue="value"
+                class="lang-select"
+              />
+            </div>
+          </div>
         </div>
-      </div>
+      </Transition>
     </section>
 
-    <!-- Storage -->
+    <!-- Storage & Sync (unified) -->
     <section class="section">
-      <h2 class="section-title">{{ t('settings.storage') }}</h2>
+      <span class="section-label">{{ t('settings.storage') }} & {{ t('sync.cloudSync') }}</span>
 
       <div class="stats-row">
         <div class="stat-chip">
@@ -361,6 +289,49 @@ function onResetAll() {
       </div>
 
       <div class="card">
+        <div class="row-between">
+          <div class="row-col">
+            <span class="row-label">{{ t('sync.cloudSync') }}</span>
+            <span class="sync-status" :class="'sync-status-' + syncState">
+              <template v-if="syncState === 'synced'">
+                <i class="pi pi-check-circle"></i> {{ t('sync.synced') }}
+              </template>
+              <template v-else-if="syncState === 'syncing'">
+                <i class="pi pi-spin pi-spinner"></i> {{ t('sync.syncing') }}
+              </template>
+              <template v-else-if="syncState === 'pending'">
+                <i class="pi pi-cloud-upload"></i> {{ t('sync.pending') }}
+              </template>
+              <template v-else-if="syncState === 'error'">
+                <i class="pi pi-exclamation-circle"></i> {{ t('sync.error') }}
+              </template>
+              <template v-else>
+                <i class="pi pi-cloud"></i> —
+              </template>
+            </span>
+          </div>
+          <button class="sync-btn" :disabled="syncing" @click="onSyncNow">
+            <i :class="syncing ? 'pi pi-spin pi-spinner' : 'pi pi-sync'"></i>
+          </button>
+        </div>
+        <span v-if="syncState === 'synced' && syncedTimeAgo" class="storage-detail">{{ syncedTimeAgo }}</span>
+        <span v-if="syncState === 'error' && syncErrorMsg" class="storage-detail" style="color: var(--color-error)">{{ syncErrorMsg }}</span>
+      </div>
+
+      <div class="card">
+        <div class="row-between">
+          <div class="row-col">
+            <span class="row-label">{{ t('settings.autoSync') }}</span>
+            <span class="row-hint">{{ t('settings.autoSyncHint') }}</span>
+          </div>
+          <ToggleSwitch v-model="settings.autoSync" />
+        </div>
+      </div>
+    </section>
+
+    <!-- Actions -->
+    <section class="section">
+      <div class="card">
         <button class="action-row" @click="onBackup" :disabled="backingUp">
           <span class="action-icon action-icon-accent">
             <i :class="backingUp ? 'pi pi-spin pi-spinner' : 'pi pi-download'"></i>
@@ -368,6 +339,19 @@ function onResetAll() {
           <div class="action-text">
             <span class="action-label">{{ t('settings.backup') }}</span>
             <span class="action-hint">{{ t('settings.backupHint') }}</span>
+          </div>
+          <i class="pi pi-chevron-right action-arrow"></i>
+        </button>
+      </div>
+
+      <div v-if="showAdmin" class="card">
+        <button class="action-row" @click="router.push('/settings/access')">
+          <span class="action-icon action-icon-accent">
+            <i class="pi pi-users"></i>
+          </span>
+          <div class="action-text">
+            <span class="action-label">{{ t('access.title') }}</span>
+            <span class="action-hint">{{ t('settings.accessHint') }}</span>
           </div>
           <i class="pi pi-chevron-right action-arrow"></i>
         </button>
@@ -384,104 +368,6 @@ function onResetAll() {
           </div>
           <i class="pi pi-chevron-right action-arrow"></i>
         </button>
-      </div>
-    </section>
-
-    <!-- Cloud Sync -->
-    <section class="section">
-      <h2 class="section-title">{{ t('sync.cloudSync') }}</h2>
-      <div class="card">
-        <div class="row-between">
-          <span class="row-label">Status</span>
-          <span class="sync-status" :class="'sync-status-' + syncState">
-            <template v-if="syncState === 'synced'">
-              <i class="pi pi-check-circle"></i> {{ t('sync.synced') }}
-            </template>
-            <template v-else-if="syncState === 'syncing'">
-              <i class="pi pi-spin pi-spinner"></i> {{ t('sync.syncing') }}
-            </template>
-            <template v-else-if="syncState === 'pending'">
-              <i class="pi pi-cloud-upload"></i> {{ t('sync.pending') }}
-            </template>
-            <template v-else-if="syncState === 'error'">
-              <i class="pi pi-exclamation-circle"></i> {{ t('sync.error') }}
-            </template>
-            <template v-else>
-              <i class="pi pi-cloud"></i> —
-            </template>
-          </span>
-        </div>
-        <span v-if="syncState === 'synced' && syncedTimeAgo" class="storage-detail">{{ syncedTimeAgo }}</span>
-        <span v-if="syncState === 'error' && syncErrorMsg" class="storage-detail" style="color: var(--color-error)">{{ syncErrorMsg }}</span>
-      </div>
-      <div class="card">
-        <button class="action-row" :disabled="syncing" @click="onSyncNow">
-          <span class="action-icon action-icon-accent">
-            <i :class="syncing ? 'pi pi-spin pi-spinner' : 'pi pi-sync'"></i>
-          </span>
-          <div class="action-text">
-            <span class="action-label">{{ t('sync.syncNow') }}</span>
-            <span class="action-hint">{{ t('sync.syncNowHint') }}</span>
-          </div>
-          <i class="pi pi-chevron-right action-arrow"></i>
-        </button>
-      </div>
-    </section>
-
-    <!-- Access Control (admin only) -->
-    <section v-if="showAdmin" class="section">
-      <h2 class="section-title">{{ t('access.title') }}</h2>
-
-      <div class="card">
-        <div class="access-add-row">
-          <InputText
-            v-model="newUserEmail"
-            type="email"
-            :placeholder="t('access.addPlaceholder')"
-            class="access-add-input"
-            @keyup.enter="onAddUser"
-          />
-          <button class="access-add-btn" :disabled="addingUser" @click="onAddUser">
-            <i :class="addingUser ? 'pi pi-spin pi-spinner' : 'pi pi-plus'"></i>
-          </button>
-        </div>
-      </div>
-
-      <div v-for="user in accessUsers" :key="user.email" class="card">
-        <div class="access-user-header">
-          <div class="access-user-info">
-            <span class="access-user-email">{{ user.email }}</span>
-            <span v-if="user.email === ADMIN_EMAIL" class="access-badge access-badge-admin">{{ t('access.admin') }}</span>
-            <span v-else-if="user.status === 'active'" class="access-badge access-badge-active">{{ t('access.active') }}</span>
-            <span v-else class="access-badge access-badge-revoked">{{ t('access.revoked') }}</span>
-          </div>
-        </div>
-        <div class="access-user-meta">
-          <span><i class="pi pi-clock"></i> {{ formatLastAccess(user.lastAccessAt) }}</span>
-          <span><i class="pi pi-desktop"></i> {{ shortDevice(user.deviceInfo) }}</span>
-        </div>
-        <div v-if="user.email !== ADMIN_EMAIL" class="access-user-actions">
-          <button
-            v-if="user.status === 'active'"
-            class="access-action-btn access-action-revoke"
-            @click="onRevokeUser(user.email)"
-          >
-            <i class="pi pi-ban"></i> {{ t('access.revoke') }}
-          </button>
-          <button
-            v-else
-            class="access-action-btn access-action-reinstate"
-            @click="onReinstateUser(user.email)"
-          >
-            <i class="pi pi-check"></i> {{ t('access.reinstate') }}
-          </button>
-          <button
-            class="access-action-btn access-action-delete"
-            @click="onDeleteUser(user.email)"
-          >
-            <i class="pi pi-trash"></i> {{ t('access.delete') }}
-          </button>
-        </div>
       </div>
     </section>
 
@@ -503,7 +389,6 @@ function onResetAll() {
 
     <!-- About -->
     <section class="section">
-      <h2 class="section-title">{{ t('settings.about') }}</h2>
       <div class="card">
         <div class="row-between">
           <span class="row-label">{{ t('settings.version') }}</span>
@@ -519,14 +404,38 @@ function onResetAll() {
 .settings-page {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-lg);
+  gap: var(--spacing-md);
   padding-bottom: var(--spacing-lg);
 }
 
 .section {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-sm);
+  gap: var(--spacing-xs);
+}
+
+.section-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 0 var(--spacing-xs);
+}
+
+.section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-sm) var(--spacing-xs);
+  background: none;
+  border: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.section-toggle:active {
+  opacity: 0.7;
 }
 
 .section-title {
@@ -537,6 +446,27 @@ function onResetAll() {
   letter-spacing: 0.5px;
 }
 
+.section-chevron {
+  font-size: 10px;
+  color: var(--color-text-secondary);
+}
+
+.section-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.collapse-enter-active,
+.collapse-leave-active {
+  transition: opacity 0.15s ease;
+}
+
+.collapse-enter-from,
+.collapse-leave-to {
+  opacity: 0;
+}
+
 /* --- Card --- */
 .card {
   background: var(--color-bg-secondary);
@@ -545,24 +475,11 @@ function onResetAll() {
   padding: var(--spacing-sm) var(--spacing-md);
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-sm);
+  gap: var(--spacing-xs);
 }
 
 .card-danger {
   border-color: rgba(220, 38, 38, 0.15);
-}
-
-.card-hint {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 10px;
-  color: var(--color-text-secondary);
-}
-
-.card-hint i {
-  font-size: 10px;
-  flex-shrink: 0;
 }
 
 /* --- Profile --- */
@@ -583,7 +500,6 @@ function onResetAll() {
   padding: 6px 8px !important;
 }
 
-/* --- Save Button --- */
 .save-btn {
   display: flex;
   align-items: center;
@@ -613,6 +529,14 @@ function onResetAll() {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--spacing-sm);
+}
+
+.row-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
 }
 
 .row-label {
@@ -624,6 +548,11 @@ function onResetAll() {
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
   font-weight: 500;
+}
+
+.row-hint {
+  font-size: 10px;
+  color: var(--color-text-secondary);
 }
 
 .lang-select {
@@ -700,6 +629,49 @@ function onResetAll() {
   color: var(--color-text-secondary);
 }
 
+/* --- Sync --- */
+.sync-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  background: var(--color-accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 14px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sync-btn:active {
+  opacity: 0.8;
+}
+
+.sync-btn:disabled {
+  opacity: 0.5;
+}
+
+.sync-status {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.sync-status i {
+  font-size: 10px;
+}
+
+.sync-status-synced { color: #10B981; }
+.sync-status-syncing { color: var(--color-text-secondary); }
+.sync-status-pending { color: #F59E0B; }
+.sync-status-error { color: var(--color-error); }
+.sync-status-idle { color: var(--color-text-secondary); }
+
 /* --- Action Row --- */
 .action-row {
   display: flex;
@@ -772,169 +744,5 @@ function onResetAll() {
   font-size: 10px;
   color: var(--color-text-secondary);
   flex-shrink: 0;
-}
-
-/* --- Sync Status --- */
-.sync-status {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: var(--font-size-xs);
-  font-weight: 500;
-}
-
-.sync-status i {
-  font-size: 11px;
-}
-
-.sync-status-synced {
-  color: #10B981;
-}
-
-.sync-status-syncing {
-  color: var(--color-text-secondary);
-}
-
-.sync-status-pending {
-  color: #F59E0B;
-}
-
-.sync-status-error {
-  color: var(--color-error);
-}
-
-.sync-status-idle {
-  color: var(--color-text-secondary);
-}
-
-/* --- Access Control --- */
-.access-add-row {
-  display: flex;
-  gap: var(--spacing-xs);
-}
-
-.access-add-input {
-  flex: 1;
-  padding: 6px 8px !important;
-}
-
-.access-add-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  flex-shrink: 0;
-  background: var(--color-accent);
-  color: #fff;
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: 13px;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.access-add-btn:active {
-  opacity: 0.8;
-}
-
-.access-user-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.access-user-info {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  min-width: 0;
-}
-
-.access-user-email {
-  font-size: var(--font-size-xs);
-  font-weight: 500;
-  color: var(--color-text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.access-badge {
-  font-size: 9px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  padding: 1px 6px;
-  border-radius: 10px;
-  flex-shrink: 0;
-}
-
-.access-badge-admin {
-  background: var(--color-accent);
-  color: #fff;
-}
-
-.access-badge-active {
-  background: rgba(16, 185, 129, 0.12);
-  color: #10B981;
-}
-
-.access-badge-revoked {
-  background: rgba(239, 68, 68, 0.12);
-  color: #EF4444;
-}
-
-.access-user-meta {
-  display: flex;
-  gap: var(--spacing-md);
-  font-size: 10px;
-  color: var(--color-text-secondary);
-}
-
-.access-user-meta i {
-  font-size: 10px;
-  margin-right: 2px;
-}
-
-.access-user-actions {
-  display: flex;
-  gap: var(--spacing-xs);
-  padding-top: var(--spacing-xs);
-  border-top: 1px solid var(--color-border);
-}
-
-.access-action-btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 6px;
-  font-size: 11px;
-  font-weight: 500;
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.access-action-btn:active {
-  opacity: 0.7;
-}
-
-.access-action-revoke {
-  background: rgba(245, 158, 11, 0.1);
-  color: #F59E0B;
-}
-
-.access-action-reinstate {
-  background: rgba(16, 185, 129, 0.1);
-  color: #10B981;
-}
-
-.access-action-delete {
-  background: rgba(239, 68, 68, 0.08);
-  color: var(--color-error);
 }
 </style>

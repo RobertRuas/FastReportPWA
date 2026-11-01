@@ -62,6 +62,7 @@ export interface AppSettings {
   ui: number
   userName: string
   userEmail: string
+  autoSync: boolean
 }
 
 export interface UndoEntry {

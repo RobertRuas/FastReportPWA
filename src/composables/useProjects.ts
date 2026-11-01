@@ -4,6 +4,7 @@ import * as db from '@/services/db'
 import { slugify } from '@/services/slugify'
 import { getMap } from '@/services/mapCatalog'
 import { removeProjectFromSyncMap } from '@/composables/useProjectSyncMap'
+import { addDefaultPhoto } from '@/services/defaultPhoto'
 
 const projects = ref<Project[]>([])
 const ready = ref(false)
@@ -47,6 +48,11 @@ export function useProjects() {
       updatedAt: now,
       exportedAt: null,
       photos: []
+    }
+
+    const defaultPhoto = await addDefaultPhoto(project.id)
+    if (defaultPhoto) {
+      project.photos.push(defaultPhoto)
     }
 
     await db.saveProjectNow(project)

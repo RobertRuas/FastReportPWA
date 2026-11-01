@@ -10,8 +10,9 @@ import { useProjectSession } from '@/composables/useProjectSession'
 import { useProjects } from '@/composables/useProjects'
 import { usePhotoStore } from '@/composables/usePhotoStore'
 import { useI18n } from '@/composables/useI18n'
-import { isProjectSynced, useProjectSyncMap } from '@/composables/useProjectSyncMap'
+import { isProjectSynced } from '@/composables/useProjectSyncMap'
 import { exportProject, shareOrSave, type ExportLayout } from '@/services/exportService'
+import { syncSingleProject, syncDeleteProject } from '@/services/projectSync'
 import ProjectTabs from '@/components/common/ProjectTabs.vue'
 
 const route = useRoute()
@@ -25,9 +26,9 @@ const { importPhotos } = usePhotoImport()
 const { project, map, stats, openProject, closeProject } = useProjectSession()
 const { markExported, removeProject } = useProjects()
 const { revokeAllUrls } = usePhotoStore()
-const { syncMap } = useProjectSyncMap()
 
 const projectId = computed(() => route.params.id as string)
+const syncing = ref(false)
 
 onMounted(async () => {
   await openProject(projectId.value)
@@ -103,11 +104,20 @@ async function onImport() {
   }
 }
 
-const showActions = ref(false)
+async function onSyncProject() {
+  if (!project.value || syncing.value) return
+  syncing.value = true
+  const result = await syncSingleProject(project.value)
+  syncing.value = false
+  if (result.ok) {
+    toast.add({ severity: 'success', summary: t('sync.syncSuccess'), life: 2000 })
+  } else {
+    toast.add({ severity: 'error', summary: t('sync.syncError'), detail: result.error, life: 4000 })
+  }
+}
 
 function onDeleteProject() {
   if (!project.value) return
-  showActions.value = false
   const isExported = !!project.value.exportedAt
   const msg = isExported
     ? t('delete.message', { name: project.value.name })
@@ -124,6 +134,7 @@ function onDeleteProject() {
       const id = project.value!.id
       closeProject()
       revokeAllUrls()
+      await syncDeleteProject(id)
       await removeProject(id)
       toast.add({ severity: 'info', summary: t('delete.success'), life: 2000 })
       router.replace('/')
@@ -132,8 +143,9 @@ function onDeleteProject() {
 }
 
 setActions([
-  { icon: 'pi pi-upload', label: 'Importar', handler: onImport },
-  { icon: 'pi pi-ellipsis-v', label: 'Menu', handler: () => { showActions.value = true } }
+  { icon: 'pi pi-upload', label: t('project.import'), handler: onImport },
+  { icon: 'pi pi-sync', label: t('sync.syncNow'), handler: onSyncProject },
+  { icon: 'pi pi-trash', label: t('app.delete'), handler: onDeleteProject }
 ])
 </script>
 
@@ -146,43 +158,38 @@ setActions([
       <span class="summary-item"><strong>{{ stats.sorted }}</strong> {{ t('project.sorted') }}</span>
       <span class="summary-sep">&middot;</span>
       <span class="summary-item"><strong>{{ stats.trashed }}</strong> {{ t('project.trash') }}</span>
-    </div>
-
-    <div
-      class="sync-badge"
-      :class="isProjectSynced(project.id, project.updatedAt) ? 'sync-badge-synced' : 'sync-badge-pending'"
-    >
-      <i :class="isProjectSynced(project.id, project.updatedAt) ? 'pi pi-cloud' : 'pi pi-cloud-upload'"></i>
-      <span>{{ isProjectSynced(project.id, project.updatedAt) ? t('sync.project.synced') : t('sync.project.notSynced') }}</span>
-    </div>
-
-    <button
-      class="triage-card"
-      :class="{ 'triage-card-active': hasPending, 'triage-card-disabled': !canTriage }"
-      :disabled="!canTriage"
-      @click="startTriage"
-    >
-      <span class="triage-card-icon" :class="{ 'triage-card-icon-pulse': hasPending }">
-        <i class="pi pi-sort-alt"></i>
+      <span class="summary-sep">&middot;</span>
+      <span
+        class="summary-sync"
+        :class="isProjectSynced(project.id, project.updatedAt) ? 'sync-ok' : 'sync-pending'"
+      >
+        <i :class="isProjectSynced(project.id, project.updatedAt) ? 'pi pi-cloud' : 'pi pi-cloud-upload'"></i>
       </span>
-      <span class="triage-card-label">{{ t('project.startTriage') }}</span>
-    </button>
+    </div>
 
-    <div class="action-row">
-      <button class="action-card" @click="onImport">
-        <span class="action-card-icon">
+    <div class="quick-actions">
+      <button
+        class="quick-btn quick-btn-triage"
+        :class="{ 'quick-btn-active': hasPending, 'quick-btn-disabled': !canTriage }"
+        :disabled="!canTriage"
+        @click="startTriage"
+      >
+        <i class="pi pi-sort-alt"></i>
+        <span>{{ t('project.startTriage') }}</span>
+      </button>
+
+      <div class="quick-row">
+        <button class="quick-btn quick-btn-sm" @click="onImport">
           <i class="pi pi-plus"></i>
-        </span>
-        <span class="action-card-label">{{ t('project.import') }}</span>
-        <span v-if="stats.total > 0" class="action-card-badge">{{ stats.total }}</span>
-      </button>
-      <button class="action-card" :class="{ 'action-card-disabled': !canExport }" @click="openExportModal">
-        <span class="action-card-icon action-card-icon-export">
+          <span>{{ t('project.import') }}</span>
+          <span v-if="stats.total > 0" class="quick-badge">{{ stats.total }}</span>
+        </button>
+        <button class="quick-btn quick-btn-sm" :class="{ 'quick-btn-disabled': !canExport }" @click="openExportModal">
           <i class="pi pi-download"></i>
-        </span>
-        <span class="action-card-label">{{ t('project.export') }}</span>
-        <span v-if="stats.sorted > 0" class="action-card-badge action-card-badge-export">{{ stats.sorted }}</span>
-      </button>
+          <span>{{ t('project.export') }}</span>
+          <span v-if="stats.sorted > 0" class="quick-badge quick-badge-export">{{ stats.sorted }}</span>
+        </button>
+      </div>
     </div>
 
     <div v-if="allSorted" class="status-area">
@@ -215,31 +222,7 @@ setActions([
 
     <ProjectTabs :projectId="projectId" :inboxCount="stats.pending" :reviewCount="stats.sorted" />
 
-    <!-- Action Sheet -->
-    <Teleport to="body">
-      <Transition name="modal-fade">
-        <div v-if="showActions" class="export-backdrop" @click.self="showActions = false">
-          <div class="export-modal">
-            <button class="action-sheet-item" @click="showActions = false; openExportModal()">
-              <i class="pi pi-download"></i>
-              <span>{{ t('project.actions.export') }}</span>
-            </button>
-            <button class="action-sheet-item" @click="showActions = false; onImport()">
-              <i class="pi pi-upload"></i>
-              <span>{{ t('project.actions.import') }}</span>
-            </button>
-            <button class="action-sheet-item action-sheet-danger" @click="onDeleteProject()">
-              <i class="pi pi-trash"></i>
-              <span>{{ t('project.actions.delete') }}</span>
-            </button>
-            <button class="action-sheet-item action-sheet-cancel" @click="showActions = false">
-              <span>{{ t('app.cancel') }}</span>
-            </button>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
-
+    <!-- Export Modal -->
     <Teleport to="body">
       <Transition name="modal-fade">
         <div v-if="showExportModal" class="export-backdrop" @click.self="!exporting && (showExportModal = false)">
@@ -299,8 +282,7 @@ setActions([
 .project-details {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xl);
-  padding-bottom: 64px;
+  gap: var(--spacing-md);
 }
 
 /* --- Summary Row --- */
@@ -322,151 +304,88 @@ setActions([
   color: var(--color-border);
 }
 
-/* --- Sync Badge --- */
-.sync-badge {
+.summary-sync {
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+}
+
+.sync-ok { color: #10B981; }
+.sync-pending { color: var(--color-text-secondary); opacity: 0.5; }
+
+/* --- Quick Actions --- */
+.quick-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.quick-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: var(--spacing-xs);
-  font-size: var(--font-size-xs);
-  font-weight: 500;
-  padding: var(--spacing-xs) var(--spacing-md);
-  border-radius: 20px;
-  align-self: center;
-}
-
-.sync-badge i {
-  font-size: 12px;
-}
-
-.sync-badge-synced {
-  color: #10B981;
-  background: #ECFDF5;
-}
-
-.sync-badge-pending {
-  color: var(--color-text-secondary);
-  background: var(--color-bg-secondary);
-}
-
-/* --- Triage Card --- */
-.triage-card {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-md);
-  padding: var(--spacing-lg) var(--spacing-md);
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
 }
 
-.triage-card:active {
+.quick-btn:active {
   background: var(--color-border);
 }
 
-.triage-card-active {
+.quick-btn-triage.quick-btn-active {
   border-color: #3B82F6;
   background: #EFF6FF;
+  color: #3B82F6;
 }
 
-.triage-card-active:active {
+.quick-btn-triage.quick-btn-active:active {
   background: #DBEAFE;
 }
 
-.triage-card-disabled {
+.quick-btn-disabled {
   opacity: 0.4;
   cursor: default;
 }
 
-.triage-card-disabled:active {
+.quick-btn-disabled:active {
   background: var(--color-bg-secondary);
 }
 
-.triage-card-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: var(--color-accent);
-  color: #fff;
-  font-size: 16px;
-}
-
-.triage-card-icon-pulse {
-  background: #3B82F6;
-  animation: pulse-icon 1.5s ease-in-out infinite;
-}
-
-@keyframes pulse-icon {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.6); transform: scale(1); }
-  50% { box-shadow: 0 0 0 14px rgba(59, 130, 246, 0); transform: scale(1.08); }
-}
-
-.triage-card-label {
-  font-size: var(--font-size-md);
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-
-/* --- Action Row --- */
-.action-row {
+.quick-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--spacing-md);
-}
-
-.action-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
   gap: var(--spacing-sm);
-  padding: var(--spacing-lg) var(--spacing-md);
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
 }
 
-.action-card:active {
-  background: var(--color-border);
-}
-
-.action-card-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: var(--color-accent);
-  color: #fff;
-  font-size: 16px;
-}
-
-.action-card-icon-export {
-  background: var(--color-success);
-}
-
-.action-card-label {
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  color: var(--color-text-primary);
-}
-
-.action-card-badge {
+.quick-btn-sm {
+  padding: var(--spacing-sm);
   font-size: var(--font-size-xs);
+}
+
+.quick-btn i {
+  font-size: 14px;
+}
+
+.quick-badge {
+  font-size: 10px;
   font-weight: 600;
   color: #3B82F6;
   background: #EFF6FF;
-  padding: 1px 8px;
+  padding: 1px 6px;
   border-radius: 10px;
+}
+
+.quick-badge-export {
+  color: var(--color-success);
+  background: #ECFDF5;
 }
 
 /* --- Status Area --- */
@@ -474,21 +393,21 @@ setActions([
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-xl) 0;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-md) 0;
 }
 
 .status-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 64px;
-  height: 64px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   background: #ECFDF5;
   color: #10B981;
-  font-size: 28px;
-  margin-bottom: var(--spacing-sm);
+  font-size: 22px;
+  margin-bottom: var(--spacing-xs);
 }
 
 .status-icon-pending {
@@ -502,13 +421,13 @@ setActions([
 }
 
 .status-title {
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--color-text-primary);
 }
 
 .status-text {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
   text-align: center;
 }
@@ -527,7 +446,7 @@ setActions([
   font-weight: 600;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  margin-top: var(--spacing-md);
+  margin-top: var(--spacing-sm);
 }
 
 .review-btn:active {
@@ -545,20 +464,9 @@ setActions([
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .triage-card-icon-pulse,
   .review-btn-pulse {
     animation: none;
   }
-}
-
-.action-card-disabled {
-  opacity: 0.4;
-  pointer-events: none;
-}
-
-.action-card-badge-export {
-  color: var(--color-success);
-  background: #ECFDF5;
 }
 
 /* --- Not Found --- */
@@ -733,52 +641,5 @@ setActions([
 
 .modal-fade-leave-to .export-modal {
   transform: translateY(100%);
-}
-
-/* --- Action Sheet --- */
-.action-sheet-item {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-  width: 100%;
-  padding: var(--spacing-md);
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid var(--color-border);
-  color: var(--color-text-primary);
-  font-size: var(--font-size-sm);
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  text-align: left;
-}
-
-.action-sheet-item:last-child {
-  border-bottom: none;
-}
-
-.action-sheet-item:active {
-  background: var(--color-bg-secondary);
-}
-
-.action-sheet-item i {
-  font-size: 16px;
-  width: 20px;
-  text-align: center;
-  color: var(--color-text-secondary);
-}
-
-.action-sheet-danger {
-  color: var(--color-error);
-}
-
-.action-sheet-danger i {
-  color: var(--color-error);
-}
-
-.action-sheet-cancel {
-  justify-content: center;
-  font-weight: 600;
-  color: var(--color-text-secondary);
-  margin-top: var(--spacing-xs);
 }
 </style>

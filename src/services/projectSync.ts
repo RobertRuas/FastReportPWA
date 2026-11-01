@@ -1,9 +1,9 @@
 import { supabase } from './supabase'
 import * as db from './db'
 import type { Project, Photo } from '@/models/types'
-import { uploadProjectPhotos, downloadProjectPhotos } from './photoSync'
+import { uploadProjectPhotos, downloadProjectPhotos, deleteProjectPhotos } from './photoSync'
 import { markSyncing, markSynced, markSyncError } from '@/composables/useSyncStatus'
-import { markProjectsSynced } from '@/composables/useProjectSyncMap'
+import { markProjectsSynced, markProjectSynced } from '@/composables/useProjectSyncMap'
 
 interface RemoteProject {
   id: string
@@ -43,6 +43,41 @@ function toLocal(r: RemoteProject): Project {
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     exportedAt: r.exported_at
+  }
+}
+
+export async function syncSingleProject(
+  project: Project
+): Promise<{ ok: boolean; error?: string }> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: 'Not authenticated' }
+
+  try {
+    await supabase.from('fr_projects').upsert(toRemote(project, user.id))
+    await uploadProjectPhotos(project, user.id)
+    markProjectSynced(project.id, project.updatedAt)
+    return { ok: true }
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? 'Sync failed' }
+  }
+}
+
+export async function syncDeleteProject(
+  projectId: string
+): Promise<{ ok: boolean; error?: string }> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: 'Not authenticated' }
+
+  try {
+    await supabase.from('fr_projects')
+      .update({ deleted: true, updated_at: new Date().toISOString() })
+      .eq('id', projectId)
+      .eq('user_id', user.id)
+
+    await deleteProjectPhotos(projectId, user.id)
+    return { ok: true }
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? 'Sync delete failed' }
   }
 }
 

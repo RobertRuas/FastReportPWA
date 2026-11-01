@@ -2,6 +2,21 @@ import { supabase } from './supabase'
 import * as db from './db'
 import type { Project } from '@/models/types'
 
+export async function deleteProjectPhotos(projectId: string, userId: string) {
+  const basePath = `${userId}/${projectId}`
+  const { data: files } = await supabase.storage.from('fr-photos').list(basePath)
+  if (files && files.length > 0) {
+    for (const folder of files) {
+      const subPath = `${basePath}/${folder.name}`
+      const { data: subFiles } = await supabase.storage.from('fr-photos').list(subPath)
+      if (subFiles && subFiles.length > 0) {
+        const paths = subFiles.map(f => `${subPath}/${f.name}`)
+        await supabase.storage.from('fr-photos').remove(paths)
+      }
+    }
+  }
+}
+
 export async function uploadProjectPhotos(project: Project, userId: string) {
   const blobs = await db.getAllBlobsForProject(project.id)
   for (const blob of blobs) {

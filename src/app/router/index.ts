@@ -77,6 +77,15 @@ const routes: RouteRecordRaw[] = [
     }
   },
 {
+    path: '/projects/list',
+    name: 'project-list',
+    component: () => import('@/pages/ProjectList/ProjectListPage.vue'),
+    meta: {
+      title: 'Projetos',
+      fallbackRoute: '/'
+    }
+  },
+  {
     path: '/maps',
     name: 'maps',
     component: () => import('@/pages/Maps/MapsPage.vue'),
@@ -92,6 +101,15 @@ const routes: RouteRecordRaw[] = [
     meta: {
       title: 'Definições',
       fallbackRoute: '/'
+    }
+  },
+  {
+    path: '/settings/access',
+    name: 'access-control',
+    component: () => import('@/pages/AccessControl/AccessControlPage.vue'),
+    meta: {
+      title: 'Utilizadores',
+      fallbackRoute: '/settings'
     }
   }
 ]

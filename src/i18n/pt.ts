@@ -63,6 +63,8 @@ export default {
   'project.actions.export': 'Exportar ZIP',
   'project.actions.import': 'Importar fotos',
   'project.actions.delete': 'Apagar projeto',
+  'project.actions.edit': 'Editar',
+  'project.actions.sync': 'Sincronizar',
 
   // Review
   'review.title': 'Revisão',
@@ -155,6 +157,9 @@ export default {
   'settings.about': 'Sobre',
   'settings.version': 'Versão',
   'settings.deviceStorage': 'Armazenamento do dispositivo',
+  'settings.autoSync': 'Sincronizar novos projetos',
+  'settings.autoSyncHint': 'Sincronizar automaticamente ao criar projetos.',
+  'settings.accessHint': 'Gerir utilizadores com acesso à aplicação.',
 
   // Install
   'install.title': 'Instalar FastReport PWA',
