@@ -10,7 +10,11 @@ import { useSettings } from '@/composables/useSettings'
 import { useProjects } from '@/composables/useProjects'
 import { useAuth } from '@/composables/useAuth'
 import { useI18n } from '@/composables/useI18n'
+import { useSyncStatus } from '@/composables/useSyncStatus'
 import { exportProject } from '@/services/exportService'
+import { syncProjects } from '@/services/projectSync'
+import { stopSettingsSync } from '@/services/settingsSync'
+import { resetSyncState } from '@/composables/useSyncStatus'
 import * as db from '@/services/db'
 
 const router = useRouter()
@@ -18,19 +22,22 @@ const toast = useToast()
 const confirm = useConfirm()
 const { t } = useI18n()
 const { settings } = useSettings()
-const { projects, totalBytes } = useProjects()
-const { logout } = useAuth()
+const { projects, totalBytes, replaceAll } = useProjects()
+const { currentUser, logout, updateProfile } = useAuth()
+const { syncState, syncedTimeAgo, syncErrorMsg } = useSyncStatus()
 
 const profileName = ref('')
 const profileEmail = ref('')
+const savingProfile = ref(false)
 
+const syncing = ref(false)
 const storageUsed = ref(0)
 const storageQuota = ref(0)
 const backingUp = ref(false)
 
 onMounted(async () => {
-  profileName.value = settings.userName
-  profileEmail.value = settings.userEmail
+  profileName.value = currentUser.value?.name ?? settings.userName
+  profileEmail.value = currentUser.value?.email ?? settings.userEmail
   const est = await db.estimateStorage()
   if (est) {
     storageUsed.value = est.used
@@ -38,9 +45,15 @@ onMounted(async () => {
   }
 })
 
-function saveProfile() {
+async function saveProfile() {
+  savingProfile.value = true
+  const result = await updateProfile(profileName.value.trim())
+  savingProfile.value = false
+  if (result.error) {
+    toast.add({ severity: 'error', summary: result.error, life: 3000 })
+    return
+  }
   settings.userName = profileName.value.trim()
-  settings.userEmail = profileEmail.value.trim()
   toast.add({ severity: 'success', summary: t('settings.profileSaved'), life: 2000 })
 }
 
@@ -132,6 +145,17 @@ async function onBackup() {
   }
 }
 
+async function onSyncNow() {
+  syncing.value = true
+  const result = await syncProjects(projects.value, replaceAll)
+  syncing.value = false
+  if (result.ok) {
+    toast.add({ severity: 'success', summary: t('sync.syncSuccess'), life: 2000 })
+  } else {
+    toast.add({ severity: 'error', summary: t('sync.syncError'), detail: result.error, life: 4000 })
+  }
+}
+
 function onLogout() {
   confirm.require({
     message: t('auth.logout.message'),
@@ -140,6 +164,8 @@ function onLogout() {
     acceptLabel: t('auth.logout.accept'),
     rejectLabel: t('app.cancel'),
     accept: async () => {
+      stopSettingsSync()
+      resetSyncState()
       await logout()
       router.replace({ name: 'auth' })
     }
@@ -188,7 +214,7 @@ function onResetAll() {
           <InputText
             v-model="profileEmail"
             type="email"
-            :placeholder="t('settings.userEmailPlaceholder')"
+            disabled
             class="profile-input"
           />
         </div>
@@ -196,8 +222,8 @@ function onResetAll() {
           <i class="pi pi-info-circle"></i>
           {{ t('settings.profileHint') }}
         </p>
-        <button class="save-btn" @click="saveProfile">
-          <i class="pi pi-check"></i>
+        <button class="save-btn" :disabled="savingProfile" @click="saveProfile">
+          <i :class="savingProfile ? 'pi pi-spin pi-spinner' : 'pi pi-check'"></i>
           {{ t('app.save') }}
         </button>
       </div>
@@ -271,6 +297,47 @@ function onResetAll() {
           <div class="action-text">
             <span class="action-label action-label-danger">{{ t('settings.resetAll') }}</span>
             <span class="action-hint">{{ t('settings.resetAllHint') }}</span>
+          </div>
+          <i class="pi pi-chevron-right action-arrow"></i>
+        </button>
+      </div>
+    </section>
+
+    <!-- Cloud Sync -->
+    <section class="section">
+      <h2 class="section-title">{{ t('sync.cloudSync') }}</h2>
+      <div class="card">
+        <div class="row-between">
+          <span class="row-label">Status</span>
+          <span class="sync-status" :class="'sync-status-' + syncState">
+            <template v-if="syncState === 'synced'">
+              <i class="pi pi-check-circle"></i> {{ t('sync.synced') }}
+            </template>
+            <template v-else-if="syncState === 'syncing'">
+              <i class="pi pi-spin pi-spinner"></i> {{ t('sync.syncing') }}
+            </template>
+            <template v-else-if="syncState === 'pending'">
+              <i class="pi pi-cloud-upload"></i> {{ t('sync.pending') }}
+            </template>
+            <template v-else-if="syncState === 'error'">
+              <i class="pi pi-exclamation-circle"></i> {{ t('sync.error') }}
+            </template>
+            <template v-else>
+              <i class="pi pi-cloud"></i> —
+            </template>
+          </span>
+        </div>
+        <span v-if="syncState === 'synced' && syncedTimeAgo" class="storage-detail">{{ syncedTimeAgo }}</span>
+        <span v-if="syncState === 'error' && syncErrorMsg" class="storage-detail" style="color: var(--color-error)">{{ syncErrorMsg }}</span>
+      </div>
+      <div class="card">
+        <button class="action-row" :disabled="syncing" @click="onSyncNow">
+          <span class="action-icon action-icon-accent">
+            <i :class="syncing ? 'pi pi-spin pi-spinner' : 'pi pi-sync'"></i>
+          </span>
+          <div class="action-text">
+            <span class="action-label">{{ t('sync.syncNow') }}</span>
+            <span class="action-hint">{{ t('sync.syncNowHint') }}</span>
           </div>
           <i class="pi pi-chevron-right action-arrow"></i>
         </button>
@@ -564,5 +631,38 @@ function onResetAll() {
   font-size: 10px;
   color: var(--color-text-secondary);
   flex-shrink: 0;
+}
+
+/* --- Sync Status --- */
+.sync-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+}
+
+.sync-status i {
+  font-size: 11px;
+}
+
+.sync-status-synced {
+  color: #10B981;
+}
+
+.sync-status-syncing {
+  color: var(--color-text-secondary);
+}
+
+.sync-status-pending {
+  color: #F59E0B;
+}
+
+.sync-status-error {
+  color: var(--color-error);
+}
+
+.sync-status-idle {
+  color: var(--color-text-secondary);
 }
 </style>

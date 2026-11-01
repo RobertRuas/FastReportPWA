@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Toast from 'primevue/toast'
 import ConfirmDialog from 'primevue/confirmdialog'
@@ -10,6 +10,8 @@ import { usePageActions } from '@/composables/usePageActions'
 import { usePageTitle } from '@/composables/usePageTitle'
 import { useProjects } from '@/composables/useProjects'
 import { useSettings } from '@/composables/useSettings'
+import { useAuth } from '@/composables/useAuth'
+import { startSettingsSync, stopSettingsSync } from '@/services/settingsSync'
 import type { PageAction } from '@/app/router'
 
 const route = useRoute()
@@ -17,13 +19,21 @@ const router = useRouter()
 const { overrideActions } = usePageActions()
 const { titleOverride } = usePageTitle()
 const { ready, load: loadProjects } = useProjects()
-const { load: loadSettings } = useSettings()
+const { settings, load: loadSettings } = useSettings()
+const { authenticated } = useAuth()
 
 const booted = ref(false)
 
 onMounted(async () => {
   await Promise.all([loadProjects(), loadSettings()])
   booted.value = true
+  if (authenticated.value) {
+    startSettingsSync(settings)
+  }
+})
+
+onUnmounted(() => {
+  stopSettingsSync()
 })
 
 const isFullscreen = computed(() => route.meta.fullscreen === true)

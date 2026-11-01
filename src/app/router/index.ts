@@ -102,15 +102,17 @@ export const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
-  if (to.meta.public) return true
-  try {
-    const { check, authenticated } = useAuth()
-    if (!authenticated.value) {
-      const ok = await check()
-      if (!ok) return { name: 'auth' }
-    }
-  } catch {
-    return { name: 'auth' }
+  const { check, authenticated } = useAuth()
+
+  if (!authenticated.value) {
+    try { await check() } catch { /* session check failed */ }
   }
+
+  if (to.meta.public) {
+    if (authenticated.value && to.name === 'auth') return { name: 'home' }
+    return true
+  }
+
+  if (!authenticated.value) return { name: 'auth' }
   return true
 })

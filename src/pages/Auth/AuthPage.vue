@@ -4,76 +4,116 @@ import { useRouter } from 'vue-router'
 import InputText from 'primevue/inputtext'
 import Button from 'primevue/button'
 import { useAuth } from '@/composables/useAuth'
-import { useSettings } from '@/composables/useSettings'
 import { useI18n } from '@/composables/useI18n'
 
 const router = useRouter()
-const { requestCode, verify } = useAuth()
-const { settings } = useSettings()
+const { sendOtp, verifyOtp, updateProfile } = useAuth()
 const { t } = useI18n()
 
-const step = ref<'register' | 'verify'>('register')
-const name = ref('')
+type Step = 'email' | 'verify' | 'name'
+
+const step = ref<Step>('email')
 const email = ref('')
-const digits = ref(['', '', '', ''])
+const name = ref('')
+const digits = ref(['', '', '', '', '', ''])
+const digitRefs = ref<HTMLInputElement[]>([])
 const loading = ref(false)
 const error = ref('')
-const digitRefs = ref<HTMLInputElement[]>([])
+const success = ref('')
 
 onMounted(() => {
-  setTimeout(() => document.getElementById('auth-name')?.focus(), 150)
+  setTimeout(() => document.getElementById('auth-email')?.focus(), 150)
 })
 
-async function handleRequestCode() {
-  const n = name.value.trim()
-  const e = email.value.trim()
+// --- Send OTP ---
 
-  if (!n || !e) {
-    error.value = t('auth.error.required')
-    return
-  }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) {
-    error.value = t('auth.error.invalidEmail')
-    return
-  }
+async function handleSendCode() {
+  const e = email.value.trim()
+  if (!e) { error.value = t('auth.error.required'); return }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { error.value = t('auth.error.invalidEmail'); return }
 
   error.value = ''
   loading.value = true
-  const sent = await requestCode(n, e)
+  const result = await sendOtp(e)
   loading.value = false
 
-  if (!sent) {
-    error.value = t('auth.error.emailNotSent')
-  }
+  if (result.error) { error.value = result.error; return }
 
   step.value = 'verify'
+  success.value = ''
   await nextTick()
   digitRefs.value[0]?.focus()
 }
 
+// --- Verify OTP ---
+
 async function handleVerify() {
   const code = digits.value.join('')
-  if (code.length !== 4) {
-    error.value = t('auth.error.incompleteCode')
-    return
-  }
+  if (code.length !== 6) { error.value = t('auth.error.incompleteCode'); return }
 
   error.value = ''
   loading.value = true
-
-  const ok = await verify(name.value.trim(), email.value.trim(), code)
+  const result = await verifyOtp(email.value.trim(), code)
   loading.value = false
 
-  if (ok) {
-    settings.userName = name.value.trim()
-    settings.userEmail = email.value.trim()
-    router.replace('/')
-  } else {
-    error.value = t('auth.error.invalidCode')
-    digits.value = ['', '', '', '']
-    await nextTick()
-    digitRefs.value[0]?.focus()
+  if (!result.ok) {
+    error.value = result.error ?? t('auth.error.invalidCode')
+    resetDigits()
+    return
   }
+
+  const { currentUser } = useAuth()
+  if (!currentUser.value?.name) {
+    step.value = 'name'
+    await nextTick()
+    document.getElementById('auth-name')?.focus()
+    return
+  }
+
+  router.replace('/')
+}
+
+// --- Set Name ---
+
+async function handleSetName() {
+  const n = name.value.trim()
+  if (!n) { error.value = t('auth.error.required'); return }
+
+  error.value = ''
+  loading.value = true
+  await updateProfile(n)
+  loading.value = false
+
+  router.replace('/')
+}
+
+// --- Resend ---
+
+async function handleResend() {
+  error.value = ''
+  success.value = ''
+  loading.value = true
+  const result = await sendOtp(email.value.trim())
+  loading.value = false
+  if (result.error) { error.value = result.error; return }
+  success.value = t('auth.codeResent')
+  resetDigits()
+}
+
+// --- Navigation ---
+
+function goBackToEmail() {
+  step.value = 'email'
+  error.value = ''
+  success.value = ''
+  nextTick(() => document.getElementById('auth-email')?.focus())
+}
+
+// --- Digit input ---
+
+function resetDigits() {
+  digits.value = ['', '', '', '', '', '']
+  nextTick(() => digitRefs.value[0]?.focus())
 }
 
 function onDigitInput(index: number, event: Event) {
@@ -82,10 +122,9 @@ function onDigitInput(index: number, event: Event) {
   digits.value[index] = val.slice(-1)
   input.value = digits.value[index]
 
-  if (val && index < 3) {
+  if (val && index < 5) {
     digitRefs.value[index + 1]?.focus()
   }
-
   if (digits.value.every(d => d !== '')) {
     handleVerify()
   }
@@ -99,31 +138,14 @@ function onDigitKeydown(index: number, event: KeyboardEvent) {
 
 function onDigitPaste(event: ClipboardEvent) {
   event.preventDefault()
-  const text = (event.clipboardData?.getData('text') || '').replace(/\D/g, '').slice(0, 4)
-  for (let i = 0; i < 4; i++) digits.value[i] = text[i] || ''
-  if (text.length === 4) {
+  const text = (event.clipboardData?.getData('text') || '').replace(/\D/g, '').slice(0, 6)
+  for (let i = 0; i < 6; i++) digits.value[i] = text[i] || ''
+  if (text.length === 6) {
     handleVerify()
   } else {
     const next = digits.value.findIndex(d => !d)
     if (next >= 0) digitRefs.value[next]?.focus()
   }
-}
-
-async function handleResend() {
-  digits.value = ['', '', '', '']
-  error.value = ''
-  await requestCode(name.value.trim(), email.value.trim())
-  nextTick(() => digitRefs.value[0]?.focus())
-}
-
-function handleBack() {
-  step.value = 'register'
-  digits.value = ['', '', '', '']
-  error.value = ''
-}
-
-function focusEmail() {
-  document.getElementById('auth-email')?.focus()
 }
 </script>
 
@@ -136,22 +158,15 @@ function focusEmail() {
           <i class="pi pi-bolt"></i>
         </div>
         <h1 class="auth-app-name">FastReport</h1>
-        <p class="auth-subtitle">{{ t('auth.subtitle') }}</p>
+        <p class="auth-subtitle">
+          <template v-if="step === 'email'">{{ t('auth.subtitleEmail') }}</template>
+          <template v-else-if="step === 'verify'">{{ t('auth.subtitleVerify') }}</template>
+          <template v-else>{{ t('auth.subtitleName') }}</template>
+        </p>
       </div>
 
-      <!-- Step 1: Register -->
-      <div v-if="step === 'register'" class="auth-form">
-        <div class="auth-field">
-          <label for="auth-name">{{ t('auth.name') }}</label>
-          <InputText
-            id="auth-name"
-            v-model="name"
-            :placeholder="t('auth.namePlaceholder')"
-            autocomplete="name"
-            @keyup.enter="focusEmail"
-          />
-        </div>
-
+      <!-- STEP 1: Email -->
+      <div v-if="step === 'email'" class="auth-form">
         <div class="auth-field">
           <label for="auth-email">{{ t('auth.email') }}</label>
           <InputText
@@ -160,22 +175,22 @@ function focusEmail() {
             type="email"
             :placeholder="t('auth.emailPlaceholder')"
             autocomplete="email"
-            @keyup.enter="handleRequestCode"
+            @keyup.enter="handleSendCode"
           />
         </div>
 
         <p v-if="error" class="auth-error">{{ error }}</p>
 
         <Button
-          :label="t('auth.requestAccess')"
+          :label="t('auth.sendCode')"
           :loading="loading"
           class="auth-submit"
-          @click="handleRequestCode"
+          @click="handleSendCode"
         />
       </div>
 
-      <!-- Step 2: Verify -->
-      <div v-else class="auth-form">
+      <!-- STEP 2: Verify OTP -->
+      <div v-else-if="step === 'verify'" class="auth-form">
         <p class="auth-verify-msg">
           {{ t('auth.codeSent') }}
           <strong>{{ email }}</strong>
@@ -183,7 +198,7 @@ function focusEmail() {
 
         <div class="auth-digits" @paste="onDigitPaste">
           <input
-            v-for="(_, i) in 4"
+            v-for="(_, i) in 6"
             :key="i"
             :ref="(el: any) => { if (el) digitRefs[i] = el as HTMLInputElement }"
             :value="digits[i]"
@@ -197,6 +212,7 @@ function focusEmail() {
         </div>
 
         <p v-if="error" class="auth-error">{{ error }}</p>
+        <p v-if="success" class="auth-success">{{ success }}</p>
 
         <Button
           :label="t('auth.verify')"
@@ -209,10 +225,33 @@ function focusEmail() {
           <button class="auth-link" @click="handleResend">
             {{ t('auth.resendCode') }}
           </button>
-          <button class="auth-link" @click="handleBack">
+          <button class="auth-link" @click="goBackToEmail">
             {{ t('auth.changeEmail') }}
           </button>
         </div>
+      </div>
+
+      <!-- STEP 3: Name (first time only) -->
+      <div v-else class="auth-form">
+        <div class="auth-field">
+          <label for="auth-name">{{ t('auth.name') }}</label>
+          <InputText
+            id="auth-name"
+            v-model="name"
+            :placeholder="t('auth.namePlaceholder')"
+            autocomplete="name"
+            @keyup.enter="handleSetName"
+          />
+        </div>
+
+        <p v-if="error" class="auth-error">{{ error }}</p>
+
+        <Button
+          :label="t('auth.continue')"
+          :loading="loading"
+          class="auth-submit"
+          @click="handleSetName"
+        />
       </div>
 
     </div>
@@ -237,7 +276,6 @@ function focusEmail() {
   max-width: 340px;
 }
 
-/* Brand */
 .auth-brand {
   text-align: center;
   margin-bottom: var(--spacing-xl);
@@ -269,7 +307,6 @@ function focusEmail() {
   margin: var(--spacing-xs) 0 0;
 }
 
-/* Form */
 .auth-form {
   display: flex;
   flex-direction: column;
@@ -306,7 +343,14 @@ function focusEmail() {
   text-align: center;
 }
 
-/* Verify step */
+.auth-success {
+  font-size: var(--font-size-xs);
+  color: var(--color-success, #16a34a);
+  margin: 0;
+  text-align: center;
+  line-height: 1.4;
+}
+
 .auth-verify-msg {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
@@ -323,14 +367,14 @@ function focusEmail() {
 .auth-digits {
   display: flex;
   justify-content: center;
-  gap: var(--spacing-sm);
+  gap: var(--spacing-xs);
 }
 
 .auth-digit {
-  width: 52px;
-  height: 60px;
+  width: 44px;
+  height: 56px;
   text-align: center;
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 600;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -346,7 +390,6 @@ function focusEmail() {
   box-shadow: 0 0 0 2px rgba(55, 65, 81, 0.15);
 }
 
-/* Links */
 .auth-links {
   display: flex;
   justify-content: center;

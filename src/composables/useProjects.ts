@@ -100,6 +100,10 @@ export function useProjects() {
     )
   )
 
+  function replaceAll(newProjects: Project[]) {
+    projects.value = newProjects
+  }
+
   return {
     projects,
     ready,
@@ -112,6 +116,7 @@ export function useProjects() {
     markExported,
     photosInSlot,
     projectStats,
-    totalBytes
+    totalBytes,
+    replaceAll
   }
 }

@@ -3,6 +3,8 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { PageAction } from '@/app/router'
 import { useSaveStatus } from '@/composables/useSaveStatus'
+import { useSyncStatus } from '@/composables/useSyncStatus'
+import { useAuth } from '@/composables/useAuth'
 
 defineProps<{
   title: string
@@ -11,6 +13,8 @@ defineProps<{
 
 const router = useRouter()
 const { isSaving, hasSaved, hasError, savedTimeAgo, errorInfo, clearError } = useSaveStatus()
+const { syncState, syncedTimeAgo, syncErrorMsg } = useSyncStatus()
+const { authenticated } = useAuth()
 
 const showPopup = ref(false)
 let popupTimer: ReturnType<typeof setTimeout> | null = null
@@ -24,6 +28,15 @@ function onIndicatorClick() {
   showPopup.value = true
   if (popupTimer) clearTimeout(popupTimer)
   popupTimer = setTimeout(() => { showPopup.value = false }, 3000)
+}
+
+const showCloudPopup = ref(false)
+let cloudPopupTimer: ReturnType<typeof setTimeout> | null = null
+
+function onCloudClick() {
+  showCloudPopup.value = true
+  if (cloudPopupTimer) clearTimeout(cloudPopupTimer)
+  cloudPopupTimer = setTimeout(() => { showCloudPopup.value = false }, 3000)
 }
 </script>
 
@@ -45,6 +58,23 @@ function onIndicatorClick() {
         <i v-if="isSaving" class="pi pi-spin pi-spinner"></i>
         <i v-else-if="hasError" class="pi pi-exclamation-circle"></i>
         <i v-else class="pi pi-check"></i>
+      </button>
+      <button
+        v-if="authenticated && syncState !== 'idle'"
+        class="save-indicator"
+        :class="{
+          'save-indicator-saving': syncState === 'syncing',
+          'save-indicator-saved': syncState === 'synced',
+          'save-indicator-error': syncState === 'error',
+          'save-indicator-pending': syncState === 'pending',
+          'save-indicator-pulse': syncState === 'error'
+        }"
+        @click="onCloudClick"
+      >
+        <i v-if="syncState === 'syncing'" class="pi pi-spin pi-spinner"></i>
+        <i v-else-if="syncState === 'error'" class="pi pi-exclamation-circle"></i>
+        <i v-else-if="syncState === 'pending'" class="pi pi-cloud-upload"></i>
+        <i v-else class="pi pi-cloud"></i>
       </button>
     </div>
     <div class="app-header-actions">
@@ -80,6 +110,29 @@ function onIndicatorClick() {
           <span class="popup-title">Não foi possível salvar</span>
           <span class="popup-detail">Verifique o espaço disponível no dispositivo.</span>
           <span v-if="errorInfo.time" class="popup-time">às {{ errorInfo.time }}</span>
+        </div>
+      </div>
+    </Transition>
+    <Transition name="popup-fade">
+      <div v-if="showCloudPopup && syncState === 'synced'" class="save-popup save-popup-ok" @click="showCloudPopup = false">
+        <i class="pi pi-cloud popup-icon popup-icon-ok"></i>
+        <div class="popup-text">
+          <span class="popup-title">Sincronizado com a nuvem</span>
+          <span v-if="syncedTimeAgo" class="popup-time">{{ syncedTimeAgo }}</span>
+        </div>
+      </div>
+      <div v-else-if="showCloudPopup && syncState === 'error'" class="save-popup save-popup-error" @click="showCloudPopup = false">
+        <i class="pi pi-exclamation-triangle popup-icon popup-icon-error"></i>
+        <div class="popup-text">
+          <span class="popup-title">Erro de sincronização</span>
+          <span v-if="syncErrorMsg" class="popup-detail">{{ syncErrorMsg }}</span>
+        </div>
+      </div>
+      <div v-else-if="showCloudPopup && syncState === 'pending'" class="save-popup save-popup-pending" @click="showCloudPopup = false">
+        <i class="pi pi-cloud-upload popup-icon popup-icon-pending"></i>
+        <div class="popup-text">
+          <span class="popup-title">Pendente</span>
+          <span class="popup-detail">Sincronize projetos nas definições.</span>
         </div>
       </div>
     </Transition>
@@ -146,6 +199,10 @@ function onIndicatorClick() {
 
 .save-indicator-error {
   color: #EF4444;
+}
+
+.save-indicator-pending {
+  color: #F59E0B;
 }
 
 .save-indicator-pulse {
@@ -220,6 +277,15 @@ function onIndicatorClick() {
 .save-popup-error {
   background: var(--color-bg-primary);
   border: 1px solid #EF4444;
+}
+
+.save-popup-pending {
+  background: var(--color-bg-primary);
+  border: 1px solid #F59E0B;
+}
+
+.popup-icon-pending {
+  color: #F59E0B;
 }
 
 .popup-icon {
