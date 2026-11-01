@@ -52,6 +52,7 @@ export function useAuth() {
     authenticated.value = false
     currentUser.value = null
     checked.value = false
+    localStorage.removeItem('fr_device_initialized')
   }
 
   async function updateProfile(name: string): Promise<{ error: string | null }> {

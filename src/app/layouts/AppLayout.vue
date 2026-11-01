@@ -28,6 +28,17 @@ const { authenticated, currentUser, logout } = useAuth()
 const syncing = ref(false)
 
 const booted = ref(false)
+const initialSync = ref(false)
+
+const DEVICE_KEY = 'fr_device_initialized'
+
+function isNewDevice(): boolean {
+  return !localStorage.getItem(DEVICE_KEY)
+}
+
+function markDeviceInitialized() {
+  localStorage.setItem(DEVICE_KEY, new Date().toISOString())
+}
 
 onMounted(async () => {
   await Promise.all([loadProjects(), loadSettings()])
@@ -40,6 +51,13 @@ onMounted(async () => {
       return
     }
     startSettingsSync(settings)
+
+    if (isNewDevice()) {
+      initialSync.value = true
+      await syncProjects(projects.value, replaceAll)
+      markDeviceInitialized()
+      initialSync.value = false
+    }
   }
 
   booted.value = true
@@ -96,6 +114,7 @@ const headerActions = computed<PageAction[]>(() => {
     </template>
     <div v-else class="app-loading">
       <i class="pi pi-spin pi-spinner app-loading-icon"></i>
+      <p v-if="initialSync" class="app-loading-text">A sincronizar dados...</p>
     </div>
     <ImportOverlay />
     <Toast position="top-center" />
@@ -135,6 +154,12 @@ const headerActions = computed<PageAction[]>(() => {
 
 .app-loading-icon {
   font-size: 24px;
+  color: var(--color-text-secondary);
+}
+
+.app-loading-text {
+  margin-top: var(--spacing-md);
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
 </style>
