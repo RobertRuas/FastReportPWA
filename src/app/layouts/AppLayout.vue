@@ -98,7 +98,7 @@ const headerActions = computed<PageAction[]>(() => {
       <i class="pi pi-spin pi-spinner app-loading-icon"></i>
     </div>
     <ImportOverlay />
-    <Toast position="top-center" :pt="{ root: { class: 'app-toast' } }" />
+    <Toast position="top-center" />
     <ConfirmDialog />
   </div>
 </template>
@@ -140,7 +140,7 @@ const headerActions = computed<PageAction[]>(() => {
 </style>
 
 <style>
-.app-toast.p-toast {
+.p-toast.p-toast-top-center {
   top: calc(var(--safe-area-top) + var(--header-height) + var(--toolbar-height) + 8px) !important;
 }
 </style>

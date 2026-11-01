@@ -113,6 +113,7 @@ export default {
   'export.emailLink': 'Enviar por e-mail',
   'export.emailLinkHint': 'Link de download válido por 1 hora.',
   'export.emailSent': 'Link enviado por e-mail',
+  'export.emailLinkCopied': 'Link copiado! Válido por 1 hora.',
   'export.emailError': 'Erro ao enviar e-mail',
   'export.emailNoUser': 'Sessão não iniciada',
   'export.done.title': 'Exportado!',

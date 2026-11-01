@@ -112,7 +112,12 @@ async function doExportEmail() {
     if (result.ok) {
       markExported(project.value)
       showExportModal.value = false
-      toast.add({ severity: 'success', summary: t('export.emailSent'), life: 4000 })
+      if (result.url) {
+        await navigator.clipboard.writeText(result.url)
+        toast.add({ severity: 'info', summary: t('export.emailLinkCopied'), life: 5000 })
+      } else {
+        toast.add({ severity: 'success', summary: t('export.emailSent'), life: 4000 })
+      }
     } else {
       toast.add({ severity: 'error', summary: t('export.emailError'), detail: result.error, life: 5000 })
     }

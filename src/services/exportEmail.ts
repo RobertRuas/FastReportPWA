@@ -6,7 +6,7 @@ export async function exportAndEmailLink(
   project: Project,
   email: string,
   onProgress?: (p: { current: number; total: number }) => void
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; url?: string; error?: string }> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { ok: false, error: 'Not authenticated' }
 
@@ -31,17 +31,17 @@ export async function exportAndEmailLink(
 
     if (signError || !signedData?.signedUrl) throw new Error(signError?.message ?? 'Failed to create download link')
 
-    const { error: fnError } = await supabase.functions.invoke('send-export-link', {
-      body: {
-        downloadUrl: signedData.signedUrl,
-        email,
-        projectName: project.name
-      }
-    })
+    const downloadUrl = signedData.signedUrl
 
-    if (fnError) throw new Error(fnError.message)
-
-    return { ok: true }
+    try {
+      const { error: fnError } = await supabase.functions.invoke('send-export-link', {
+        body: { downloadUrl, email, projectName: project.name }
+      })
+      if (fnError) throw fnError
+      return { ok: true }
+    } catch {
+      return { ok: true, url: downloadUrl }
+    }
   } catch (err: any) {
     return { ok: false, error: err?.message ?? 'Export email failed' }
   }
