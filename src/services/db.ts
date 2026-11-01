@@ -233,6 +233,18 @@ export async function boot(): Promise<BootData> {
   return { projects, settings }
 }
 
+// --- Clear Local Cache (photos only) ---
+
+export async function clearLocalCache(): Promise<void> {
+  const database = await open()
+  return new Promise((resolve, reject) => {
+    const t = database.transaction('blobs', 'readwrite')
+    t.oncomplete = () => resolve()
+    t.onerror = () => reject(t.error)
+    t.objectStore('blobs').clear()
+  })
+}
+
 // --- Clear All Data ---
 
 export async function clearAllData(): Promise<void> {

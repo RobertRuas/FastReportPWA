@@ -174,6 +174,30 @@ function onLogout() {
   })
 }
 
+function onClearCache() {
+  confirm.require({
+    message: t('settings.clearCache.message'),
+    header: t('settings.clearCache.title'),
+    icon: 'pi pi-eraser',
+    acceptLabel: t('settings.clearCache.accept'),
+    rejectLabel: t('app.cancel'),
+    accept: async () => {
+      try {
+        await db.clearLocalCache()
+        const est = await db.estimateStorage()
+        if (est) {
+          storageUsed.value = est.used
+          storageQuota.value = est.quota
+        }
+        toast.add({ severity: 'success', summary: t('settings.clearCache.success'), life: 2000 })
+      } catch (err) {
+        console.error('[FastReport] Clear cache failed:', err)
+        toast.add({ severity: 'error', summary: t('app.error'), life: 3000 })
+      }
+    }
+  })
+}
+
 function onResetAll() {
   confirm.require({
     message: t('settings.resetAll.message'),
@@ -353,6 +377,19 @@ function onResetAll() {
           <div class="action-text">
             <span class="action-label">{{ t('access.title') }}</span>
             <span class="action-hint">{{ t('settings.accessHint') }}</span>
+          </div>
+          <i class="pi pi-chevron-right action-arrow"></i>
+        </button>
+      </div>
+
+      <div class="card">
+        <button class="action-row" @click="onClearCache">
+          <span class="action-icon action-icon-accent">
+            <i class="pi pi-eraser"></i>
+          </span>
+          <div class="action-text">
+            <span class="action-label">{{ t('settings.clearCache') }}</span>
+            <span class="action-hint">{{ t('settings.clearCacheHint') }}</span>
           </div>
           <i class="pi pi-chevron-right action-arrow"></i>
         </button>

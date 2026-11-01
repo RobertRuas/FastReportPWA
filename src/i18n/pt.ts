@@ -152,6 +152,12 @@ export default {
   'settings.backupProgress': 'A criar backup...',
   'settings.backupSuccess': 'Backup criado com sucesso',
   'settings.backupError': 'Erro ao criar backup',
+  'settings.clearCache': 'Limpar cache local',
+  'settings.clearCacheHint': 'Remove as fotos do dispositivo. Projetos e dados mantidos.',
+  'settings.clearCache.title': 'Limpar cache',
+  'settings.clearCache.message': 'As fotos armazenadas localmente serão apagadas. Os projetos e definições serão mantidos. As fotos podem ser resincronizadas a partir da nuvem.',
+  'settings.clearCache.accept': 'Limpar',
+  'settings.clearCache.success': 'Cache limpo',
   'settings.resetAll': 'Apagar todos os dados',
   'settings.resetAllHint': 'Remove todos os projetos, fotos e definições.',
   'settings.resetAll.title': 'Apagar todos os dados',
@@ -208,6 +214,8 @@ export default {
   'sync.syncSuccess': 'Sincronização concluída',
   'sync.syncError': 'Erro ao sincronizar',
   'sync.cloudSync': 'Sincronização',
+  'sync.newDeviceTitle': 'Novo dispositivo detetado',
+  'sync.newDeviceHint': 'Os seus projetos foram carregados. Sincronize para transferir as fotos.',
 
   // Access control
   'access.title': 'Utilizadores permitidos',

@@ -47,6 +47,65 @@ function toLocal(r: RemoteProject): Project {
   }
 }
 
+export async function syncProjectsMetadataOnly(
+  localProjects: Project[],
+  onProjectsChanged: (projects: Project[]) => void
+): Promise<{ ok: boolean; error?: string }> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: 'Not authenticated' }
+
+  try {
+    const { data: remoteRows, error } = await supabase
+      .from('fr_projects')
+      .select('*')
+      .eq('user_id', user.id)
+
+    if (error) throw error
+
+    const remote = (remoteRows ?? []) as RemoteProject[]
+    const remoteMap = new Map(remote.map(r => [r.id, r]))
+    const localMap = new Map(localProjects.map(l => [l.id, l]))
+    const merged: Project[] = []
+
+    const allIds = new Set([...localMap.keys(), ...remoteMap.keys()])
+
+    for (const id of allIds) {
+      const local = localMap.get(id)
+      const rem = remoteMap.get(id)
+
+      if (local && !rem) {
+        await supabase.from('fr_projects').upsert(toRemote(local, user.id))
+        merged.push(local)
+      } else if (!local && rem) {
+        if (!rem.deleted) {
+          const proj = toLocal(rem)
+          await db.saveProject(proj)
+          merged.push(proj)
+        }
+      } else if (local && rem) {
+        if (rem.deleted) {
+          await db.deleteProject(id)
+        } else {
+          const localTime = new Date(local.updatedAt).getTime()
+          const remoteTime = new Date(rem.updated_at).getTime()
+          if (remoteTime > localTime) {
+            const proj = toLocal(rem)
+            await db.saveProject(proj)
+            merged.push(proj)
+          } else {
+            merged.push(local)
+          }
+        }
+      }
+    }
+
+    onProjectsChanged(merged)
+    return { ok: true }
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? 'Metadata sync failed' }
+  }
+}
+
 export async function syncSingleProject(
   project: Project,
   onProgress?: (p: SyncProgress) => void
