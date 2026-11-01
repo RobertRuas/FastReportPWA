@@ -3,6 +3,7 @@ import type { Project, Photo } from '@/models/types'
 import * as db from '@/services/db'
 import { slugify } from '@/services/slugify'
 import { getMap } from '@/services/mapCatalog'
+import { removeProjectFromSyncMap } from '@/composables/useProjectSyncMap'
 
 const projects = ref<Project[]>([])
 const ready = ref(false)
@@ -59,6 +60,7 @@ export function useProjects() {
     await db.deleteProject(id)
     const idx = projects.value.findIndex(p => p.id === id)
     if (idx >= 0) projects.value.splice(idx, 1)
+    removeProjectFromSyncMap(id)
   }
 
   function touchProject(project: Project) {

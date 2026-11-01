@@ -221,6 +221,10 @@ export default {
   'access.confirmRevoke': 'Revogar acesso de {email}?',
   'access.confirmDelete': 'Excluir {email} permanentemente?',
 
+  // Project sync
+  'sync.project.synced': 'Sincronizado',
+  'sync.project.notSynced': 'Não sincronizado',
+
   // Slots
   'slot.inbox': 'Inbox',
   'slot.general': 'Geral',

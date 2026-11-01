@@ -3,6 +3,7 @@ import * as db from './db'
 import type { Project, Photo } from '@/models/types'
 import { uploadProjectPhotos, downloadProjectPhotos } from './photoSync'
 import { markSyncing, markSynced, markSyncError } from '@/composables/useSyncStatus'
+import { markProjectsSynced } from '@/composables/useProjectSyncMap'
 
 interface RemoteProject {
   id: string
@@ -111,6 +112,7 @@ export async function syncProjects(
     }
 
     onProjectsChanged(merged)
+    markProjectsSynced(merged.map(p => ({ id: p.id, updatedAt: p.updatedAt })))
     markSynced()
     return { ok: true }
   } catch (err: any) {

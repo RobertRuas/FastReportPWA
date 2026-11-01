@@ -10,6 +10,7 @@ import { useProjectSession } from '@/composables/useProjectSession'
 import { useProjects } from '@/composables/useProjects'
 import { usePhotoStore } from '@/composables/usePhotoStore'
 import { useI18n } from '@/composables/useI18n'
+import { isProjectSynced, useProjectSyncMap } from '@/composables/useProjectSyncMap'
 import { exportProject, shareOrSave, type ExportLayout } from '@/services/exportService'
 import ProjectTabs from '@/components/common/ProjectTabs.vue'
 
@@ -24,6 +25,7 @@ const { importPhotos } = usePhotoImport()
 const { project, map, stats, openProject, closeProject } = useProjectSession()
 const { markExported, removeProject } = useProjects()
 const { revokeAllUrls } = usePhotoStore()
+const { syncMap } = useProjectSyncMap()
 
 const projectId = computed(() => route.params.id as string)
 
@@ -144,6 +146,14 @@ setActions([
       <span class="summary-item"><strong>{{ stats.sorted }}</strong> {{ t('project.sorted') }}</span>
       <span class="summary-sep">&middot;</span>
       <span class="summary-item"><strong>{{ stats.trashed }}</strong> {{ t('project.trash') }}</span>
+    </div>
+
+    <div
+      class="sync-badge"
+      :class="isProjectSynced(project.id, project.updatedAt) ? 'sync-badge-synced' : 'sync-badge-pending'"
+    >
+      <i :class="isProjectSynced(project.id, project.updatedAt) ? 'pi pi-cloud' : 'pi pi-cloud-upload'"></i>
+      <span>{{ isProjectSynced(project.id, project.updatedAt) ? t('sync.project.synced') : t('sync.project.notSynced') }}</span>
     </div>
 
     <button
@@ -310,6 +320,33 @@ setActions([
 
 .summary-sep {
   color: var(--color-border);
+}
+
+/* --- Sync Badge --- */
+.sync-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  padding: var(--spacing-xs) var(--spacing-md);
+  border-radius: 20px;
+  align-self: center;
+}
+
+.sync-badge i {
+  font-size: 12px;
+}
+
+.sync-badge-synced {
+  color: #10B981;
+  background: #ECFDF5;
+}
+
+.sync-badge-pending {
+  color: var(--color-text-secondary);
+  background: var(--color-bg-secondary);
 }
 
 /* --- Triage Card --- */

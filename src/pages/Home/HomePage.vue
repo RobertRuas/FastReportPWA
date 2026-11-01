@@ -6,6 +6,7 @@ import Tag from 'primevue/tag'
 import ProgressBar from 'primevue/progressbar'
 import { useProjects } from '@/composables/useProjects'
 import { useI18n } from '@/composables/useI18n'
+import { isProjectSynced, useProjectSyncMap } from '@/composables/useProjectSyncMap'
 import { getAllMaps, getMap } from '@/services/mapCatalog'
 import { importZip } from '@/services/zipImportService'
 import * as db from '@/services/db'
@@ -14,6 +15,7 @@ const router = useRouter()
 const toast = useToast()
 const { t, lang } = useI18n()
 const { projects, projectStats, totalBytes } = useProjects()
+const { syncMap } = useProjectSyncMap()
 const importing = ref(false)
 
 const storageUsed = ref(0)
@@ -166,10 +168,13 @@ async function onImportZip() {
             </div>
           </div>
           <div class="project-end">
-            <Tag
-              :value="project.exportedAt ? t('home.badge.exported') : t('home.badge.pending')"
-              :severity="project.exportedAt ? 'success' : 'warn'"
-            />
+            <span
+              class="project-sync-dot"
+              :class="isProjectSynced(project.id, project.updatedAt) ? 'project-sync-dot-synced' : 'project-sync-dot-pending'"
+              :title="isProjectSynced(project.id, project.updatedAt) ? t('sync.project.synced') : t('sync.project.notSynced')"
+            >
+              <i :class="isProjectSynced(project.id, project.updatedAt) ? 'pi pi-cloud' : 'pi pi-cloud-upload'"></i>
+            </span>
             <i class="pi pi-chevron-right project-arrow"></i>
           </div>
         </button>
@@ -373,6 +378,22 @@ async function onImportZip() {
   align-items: center;
   gap: var(--spacing-sm);
   flex-shrink: 0;
+}
+
+.project-sync-dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.project-sync-dot-synced {
+  color: #10B981;
+}
+
+.project-sync-dot-pending {
+  color: var(--color-text-secondary);
+  opacity: 0.5;
 }
 
 .project-arrow {
