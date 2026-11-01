@@ -111,6 +111,15 @@ const routes: RouteRecordRaw[] = [
       title: 'Utilizadores',
       fallbackRoute: '/settings'
     }
+  },
+  {
+    path: '/download',
+    name: 'download',
+    component: () => import('@/pages/Download/DownloadPage.vue'),
+    meta: {
+      fullscreen: true,
+      public: true
+    }
   }
 ]
 

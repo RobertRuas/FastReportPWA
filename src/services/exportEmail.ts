@@ -2,11 +2,17 @@ import { supabase } from './supabase'
 import type { Project } from '@/models/types'
 import { exportProject } from './exportService'
 
+function buildDownloadPageUrl(signedUrl: string, projectName: string): string {
+  const base = window.location.origin + window.location.pathname
+  const params = new URLSearchParams({ url: signedUrl, name: projectName })
+  return `${base}#/download?${params.toString()}`
+}
+
 export async function exportAndEmailLink(
   project: Project,
   email: string,
   onProgress?: (p: { current: number; total: number }) => void
-): Promise<{ ok: boolean; url?: string; error?: string }> {
+): Promise<{ ok: boolean; error?: string }> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { ok: false, error: 'Not authenticated' }
 
@@ -31,17 +37,17 @@ export async function exportAndEmailLink(
 
     if (signError || !signedData?.signedUrl) throw new Error(signError?.message ?? 'Failed to create download link')
 
-    const downloadUrl = signedData.signedUrl
+    const pageUrl = buildDownloadPageUrl(signedData.signedUrl, project.name)
 
-    try {
-      const { error: fnError } = await supabase.functions.invoke('send-export-link', {
-        body: { downloadUrl, email, projectName: project.name }
-      })
-      if (fnError) throw fnError
-      return { ok: true }
-    } catch {
-      return { ok: true, url: downloadUrl }
-    }
+    const subject = encodeURIComponent(`FastReport: Download "${project.name}"`)
+    const body = encodeURIComponent(
+      `O projeto "${project.name}" está pronto para download.\n\n` +
+      `${pageUrl}\n\n` +
+      `Este link expira em 1 hora.`
+    )
+    window.location.href = `mailto:${email}?subject=${subject}&body=${body}`
+
+    return { ok: true }
   } catch (err: any) {
     return { ok: false, error: err?.message ?? 'Export email failed' }
   }
