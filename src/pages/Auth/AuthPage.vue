@@ -5,9 +5,10 @@ import InputText from 'primevue/inputtext'
 import Button from 'primevue/button'
 import { useAuth } from '@/composables/useAuth'
 import { useI18n } from '@/composables/useI18n'
+import { checkAccess, updateLastAccess } from '@/services/accessService'
 
 const router = useRouter()
-const { sendOtp, verifyOtp, updateProfile } = useAuth()
+const { sendOtp, verifyOtp, updateProfile, logout } = useAuth()
 const { t } = useI18n()
 
 type Step = 'email' | 'verify' | 'name'
@@ -61,6 +62,24 @@ async function handleVerify() {
     resetDigits()
     return
   }
+
+  const access = await checkAccess(email.value.trim())
+  if (access === 'denied') {
+    error.value = t('auth.error.notAuthorized')
+    await logout()
+    step.value = 'email'
+    loading.value = false
+    return
+  }
+  if (access === 'revoked') {
+    error.value = t('auth.error.accessRevoked')
+    await logout()
+    step.value = 'email'
+    loading.value = false
+    return
+  }
+
+  await updateLastAccess(email.value.trim())
 
   const { currentUser } = useAuth()
   if (!currentUser.value?.name) {

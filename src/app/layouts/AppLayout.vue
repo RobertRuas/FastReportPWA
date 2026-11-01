@@ -12,6 +12,7 @@ import { useProjects } from '@/composables/useProjects'
 import { useSettings } from '@/composables/useSettings'
 import { useAuth } from '@/composables/useAuth'
 import { startSettingsSync, stopSettingsSync } from '@/services/settingsSync'
+import { checkAccess } from '@/services/accessService'
 import type { PageAction } from '@/app/router'
 
 const route = useRoute()
@@ -20,16 +21,24 @@ const { overrideActions } = usePageActions()
 const { titleOverride } = usePageTitle()
 const { ready, load: loadProjects } = useProjects()
 const { settings, load: loadSettings } = useSettings()
-const { authenticated } = useAuth()
+const { authenticated, currentUser, logout } = useAuth()
 
 const booted = ref(false)
 
 onMounted(async () => {
   await Promise.all([loadProjects(), loadSettings()])
-  booted.value = true
-  if (authenticated.value) {
+
+  if (authenticated.value && currentUser.value?.email) {
+    const access = await checkAccess(currentUser.value.email)
+    if (access !== 'allowed') {
+      await logout()
+      router.replace({ name: 'auth' })
+      return
+    }
     startSettingsSync(settings)
   }
+
+  booted.value = true
 })
 
 onUnmounted(() => {

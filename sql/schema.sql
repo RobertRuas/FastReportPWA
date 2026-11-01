@@ -89,3 +89,34 @@ CREATE POLICY fr_photos_delete ON storage.objects
     bucket_id = 'fr-photos' AND
     (storage.foldername(name))[1] = auth.uid()::text
   );
+
+-- ============================================================
+-- 4. Controlo de acesso (whitelist de utilizadores)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.fr_access_list (
+  email       TEXT PRIMARY KEY,
+  status      TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'revoked')),
+  last_access_at TIMESTAMPTZ,
+  device_info TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.fr_access_list ENABLE ROW LEVEL SECURITY;
+
+-- Admin pode fazer tudo
+CREATE POLICY fr_access_admin ON public.fr_access_list
+  FOR ALL USING (auth.jwt() ->> 'email' = '92ruas@gmail.com')
+  WITH CHECK (auth.jwt() ->> 'email' = '92ruas@gmail.com');
+
+-- Qualquer utilizador autenticado pode ler a sua própria linha
+CREATE POLICY fr_access_self_select ON public.fr_access_list
+  FOR SELECT USING (auth.jwt() ->> 'email' = email);
+
+-- Qualquer utilizador autenticado pode atualizar o seu último acesso
+CREATE POLICY fr_access_self_update ON public.fr_access_list
+  FOR UPDATE USING (auth.jwt() ->> 'email' = email);
+
+-- Inserir admin como primeiro utilizador
+INSERT INTO public.fr_access_list (email, status)
+VALUES ('92ruas@gmail.com', 'active')
+ON CONFLICT (email) DO NOTHING;
