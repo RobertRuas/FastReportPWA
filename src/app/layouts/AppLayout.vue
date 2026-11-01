@@ -98,7 +98,7 @@ const headerActions = computed<PageAction[]>(() => {
       <i class="pi pi-spin pi-spinner app-loading-icon"></i>
     </div>
     <ImportOverlay />
-    <Toast position="bottom-center" />
+    <Toast position="top-center" />
     <ConfirmDialog />
   </div>
 </template>
