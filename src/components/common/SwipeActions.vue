@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 
 export interface SwipeAction {
   icon: string
@@ -8,15 +8,16 @@ export interface SwipeAction {
   handler: () => void
 }
 
-defineProps<{
+const props = defineProps<{
   actions: SwipeAction[]
 }>()
 
-const container = ref<HTMLElement>()
+const ACTION_WIDTH = 56
+const SNAP_THRESHOLD = 30
+
+const openWidth = computed(() => ACTION_WIDTH * props.actions.length)
 const offsetX = ref(0)
 const isOpen = ref(false)
-const THRESHOLD = 60
-const ACTION_WIDTH = 64
 
 let startX = 0
 let startY = 0
@@ -42,23 +43,36 @@ function onTouchMove(e: TouchEvent) {
     if (Math.abs(dx) > 8) dragging = true
   }
 
-  if (locked) return
-  if (!dragging) return
+  if (locked || !dragging) return
 
   e.preventDefault()
-  const base = isOpen.value ? -THRESHOLD : 0
+  const base = isOpen.value ? -openWidth.value : 0
   const raw = base + dx
-  offsetX.value = Math.min(0, Math.max(-THRESHOLD * 2, raw))
+  offsetX.value = Math.min(0, Math.max(-openWidth.value - 20, raw))
 }
 
 function onTouchEnd() {
-  if (!dragging) return
-  if (offsetX.value < -THRESHOLD / 2) {
-    offsetX.value = -THRESHOLD
-    isOpen.value = true
+  if (!dragging) {
+    if (isOpen.value) {
+      close()
+    }
+    return
+  }
+  dragging = false
+
+  if (isOpen.value) {
+    if (offsetX.value > -openWidth.value + SNAP_THRESHOLD) {
+      close()
+    } else {
+      offsetX.value = -openWidth.value
+    }
   } else {
-    offsetX.value = 0
-    isOpen.value = false
+    if (offsetX.value < -SNAP_THRESHOLD) {
+      offsetX.value = -openWidth.value
+      isOpen.value = true
+    } else {
+      offsetX.value = 0
+    }
   }
 }
 
@@ -71,27 +85,30 @@ function onActionClick(action: SwipeAction) {
   close()
   action.handler()
 }
+
+defineExpose({ close })
 </script>
 
 <template>
-  <div class="swipe-container" ref="container">
+  <div class="swipe-container">
     <div
       class="swipe-content"
       :style="{ transform: `translateX(${offsetX}px)` }"
-      :class="{ 'swipe-content-animated': !dragging }"
+      :class="{ 'swipe-animated': !dragging }"
       @touchstart.passive="onTouchStart"
       @touchmove="onTouchMove"
       @touchend="onTouchEnd"
     >
       <slot />
     </div>
-    <div class="swipe-actions" :style="{ width: `${ACTION_WIDTH * actions.length}px` }">
+    <div class="swipe-actions" :style="{ width: `${openWidth}px` }">
       <button
         v-for="(action, i) in actions"
         :key="i"
         class="swipe-action-btn"
         :style="{ background: action.color, width: `${ACTION_WIDTH}px` }"
         @click="onActionClick(action)"
+        :aria-label="action.label"
       >
         <i :class="action.icon"></i>
       </button>
@@ -111,8 +128,8 @@ function onActionClick(action: SwipeAction) {
   background: var(--color-bg-secondary);
 }
 
-.swipe-content-animated {
-  transition: transform 0.2s ease;
+.swipe-animated {
+  transition: transform 0.25s ease;
 }
 
 .swipe-actions {
@@ -126,8 +143,10 @@ function onActionClick(action: SwipeAction) {
 
 .swipe-action-btn {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 2px;
   height: 100%;
   border: none;
   color: #fff;

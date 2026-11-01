@@ -219,10 +219,11 @@ function onResetAll() {
             <div class="profile-field">
               <label class="profile-label">{{ t('settings.userEmail') }}</label>
               <InputText
-                v-model="profileEmail"
+                :modelValue="profileEmail"
                 type="email"
                 disabled
-                class="profile-input"
+                readonly
+                class="profile-input profile-input-disabled"
               />
             </div>
             <button class="save-btn" :disabled="savingProfile" @click="saveProfile">
@@ -498,6 +499,12 @@ function onResetAll() {
 .profile-input {
   width: 100%;
   padding: 6px 8px !important;
+}
+
+.profile-input-disabled {
+  opacity: 0.6;
+  background: var(--color-border);
+  pointer-events: none;
 }
 
 .save-btn {

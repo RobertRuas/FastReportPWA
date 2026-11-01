@@ -1,8 +1,7 @@
 import * as db from './db'
 import type { Photo, PhotoBlob } from '@/models/types'
 import { processImage, generateThumb } from './imageProcessor'
-
-const NA_IMAGE_URL = '/na.jpg'
+import naImageUrl from '@/assets/na.jpg'
 
 function generatePhotoId(): string {
   const ts = Date.now().toString(36)
@@ -12,8 +11,11 @@ function generatePhotoId(): string {
 
 export async function addDefaultPhoto(projectId: string): Promise<Photo | null> {
   try {
-    const response = await fetch(NA_IMAGE_URL)
-    if (!response.ok) return null
+    const response = await fetch(naImageUrl)
+    if (!response.ok) {
+      console.warn('[FastReport] Failed to fetch default image:', response.status)
+      return null
+    }
     const rawBlob = await response.blob()
 
     const file = new File([rawBlob], 'na.jpg', { type: 'image/jpeg' })
