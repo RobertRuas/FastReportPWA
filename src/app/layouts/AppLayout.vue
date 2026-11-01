@@ -98,7 +98,7 @@ const headerActions = computed<PageAction[]>(() => {
       <i class="pi pi-spin pi-spinner app-loading-icon"></i>
     </div>
     <ImportOverlay />
-    <Toast position="top-center" />
+    <Toast position="top-center" :pt="{ root: { class: 'app-toast' } }" />
     <ConfirmDialog />
   </div>
 </template>
@@ -136,5 +136,11 @@ const headerActions = computed<PageAction[]>(() => {
 .app-loading-icon {
   font-size: 24px;
   color: var(--color-text-secondary);
+}
+</style>
+
+<style>
+.app-toast.p-toast {
+  top: calc(var(--safe-area-top) + var(--header-height) + var(--toolbar-height) + 8px) !important;
 }
 </style>

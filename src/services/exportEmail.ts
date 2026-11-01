@@ -14,10 +14,10 @@ export async function exportAndEmailLink(
     const blob = await exportProject(project, 'folders', onProgress)
 
     const timestamp = Date.now()
-    const filePath = `${user.id}/exports/${project.slug || project.id}-${timestamp}.zip`
+    const filePath = `${user.id}/${project.slug || project.id}-${timestamp}.zip`
 
     const { error: uploadError } = await supabase.storage
-      .from('fr-photos')
+      .from('fr-exports')
       .upload(filePath, blob, {
         contentType: 'application/zip',
         upsert: false
@@ -26,7 +26,7 @@ export async function exportAndEmailLink(
     if (uploadError) throw new Error(uploadError.message)
 
     const { data: signedData, error: signError } = await supabase.storage
-      .from('fr-photos')
+      .from('fr-exports')
       .createSignedUrl(filePath, 3600)
 
     if (signError || !signedData?.signedUrl) throw new Error(signError?.message ?? 'Failed to create download link')
