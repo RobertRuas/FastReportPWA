@@ -2,6 +2,12 @@ import { supabase } from './supabase'
 import * as db from './db'
 import type { Project } from '@/models/types'
 
+export interface SyncProgress {
+  current: number
+  total: number
+  phase: 'uploading' | 'downloading'
+}
+
 export async function deleteProjectPhotos(projectId: string, userId: string) {
   const basePath = `${userId}/${projectId}`
   const { data: files } = await supabase.storage.from('fr-photos').list(basePath)
@@ -17,8 +23,15 @@ export async function deleteProjectPhotos(projectId: string, userId: string) {
   }
 }
 
-export async function uploadProjectPhotos(project: Project, userId: string) {
+export async function uploadProjectPhotos(
+  project: Project,
+  userId: string,
+  onProgress?: (p: SyncProgress) => void
+) {
   const blobs = await db.getAllBlobsForProject(project.id)
+  const total = blobs.length
+  let current = 0
+
   for (const blob of blobs) {
     const basePath = `${userId}/${project.id}/${blob.id}`
 
@@ -42,13 +55,27 @@ export async function uploadProjectPhotos(project: Project, userId: string) {
         { contentType: 'image/jpeg', upsert: true }
       )
     }
+
+    current++
+    onProgress?.({ current, total, phase: 'uploading' })
   }
 }
 
-export async function downloadProjectPhotos(project: Project, userId: string) {
+export async function downloadProjectPhotos(
+  project: Project,
+  userId: string,
+  onProgress?: (p: SyncProgress) => void
+) {
+  const total = project.photos.length
+  let current = 0
+
   for (const photo of project.photos) {
     const existing = await db.getBlob(photo.id)
-    if (existing) continue
+    if (existing) {
+      current++
+      onProgress?.({ current, total, phase: 'downloading' })
+      continue
+    }
 
     const basePath = `${userId}/${project.id}/${photo.id}`
 
@@ -65,5 +92,8 @@ export async function downloadProjectPhotos(project: Project, userId: string) {
         thumb: thumbRes.data
       })
     }
+
+    current++
+    onProgress?.({ current, total, phase: 'downloading' })
   }
 }

@@ -30,6 +30,8 @@ const { revokeAllUrls } = usePhotoStore()
 
 const projectId = computed(() => route.params.id as string)
 const syncing = ref(false)
+const syncProgress = ref(0)
+const syncTotal = ref(0)
 const emailExporting = ref(false)
 
 onMounted(async () => {
@@ -139,7 +141,12 @@ async function onImport() {
 async function onSyncProject() {
   if (!project.value || syncing.value) return
   syncing.value = true
-  const result = await syncSingleProject(project.value)
+  syncProgress.value = 0
+  syncTotal.value = 0
+  const result = await syncSingleProject(project.value, (p) => {
+    syncProgress.value = p.current
+    syncTotal.value = p.total
+  })
   syncing.value = false
   if (result.ok) {
     toast.add({ severity: 'success', summary: t('sync.syncSuccess'), life: 2000 })
@@ -196,6 +203,15 @@ setActions([
         :class="isProjectSynced(project.id, project.updatedAt) ? 'sync-ok' : 'sync-pending'"
       >
         <i :class="isProjectSynced(project.id, project.updatedAt) ? 'pi pi-cloud' : 'pi pi-cloud-upload'"></i>
+      </span>
+    </div>
+
+    <div v-if="syncing" class="sync-progress">
+      <div class="sync-progress-bar">
+        <div class="sync-progress-fill" :style="{ width: syncTotal > 0 ? (syncProgress / syncTotal * 100) + '%' : '0%' }"></div>
+      </div>
+      <span class="sync-progress-text">
+        {{ t('sync.syncing') }} {{ syncTotal > 0 ? `${syncProgress}/${syncTotal}` : '' }}
       </span>
     </div>
 
@@ -355,6 +371,35 @@ setActions([
 
 .sync-ok { color: #10B981; }
 .sync-pending { color: var(--color-text-secondary); opacity: 0.5; }
+
+/* --- Sync Progress --- */
+.sync-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) 0;
+}
+
+.sync-progress-bar {
+  flex: 1;
+  height: 4px;
+  background: var(--color-border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.sync-progress-fill {
+  height: 100%;
+  background: var(--color-accent);
+  border-radius: 2px;
+  transition: width 0.2s ease;
+}
+
+.sync-progress-text {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
 
 /* --- Quick Actions --- */
 .quick-actions {

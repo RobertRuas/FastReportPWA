@@ -2,6 +2,7 @@ import { supabase } from './supabase'
 import * as db from './db'
 import type { Project, Photo } from '@/models/types'
 import { uploadProjectPhotos, downloadProjectPhotos, deleteProjectPhotos } from './photoSync'
+import type { SyncProgress } from './photoSync'
 import { markSyncing, markSynced, markSyncError } from '@/composables/useSyncStatus'
 import { markProjectsSynced, markProjectSynced } from '@/composables/useProjectSyncMap'
 
@@ -47,14 +48,15 @@ function toLocal(r: RemoteProject): Project {
 }
 
 export async function syncSingleProject(
-  project: Project
+  project: Project,
+  onProgress?: (p: SyncProgress) => void
 ): Promise<{ ok: boolean; error?: string }> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { ok: false, error: 'Not authenticated' }
 
   try {
     await supabase.from('fr_projects').upsert(toRemote(project, user.id))
-    await uploadProjectPhotos(project, user.id)
+    await uploadProjectPhotos(project, user.id, onProgress)
     markProjectSynced(project.id, project.updatedAt)
     return { ok: true }
   } catch (err: any) {
@@ -83,7 +85,8 @@ export async function syncDeleteProject(
 
 export async function syncProjects(
   localProjects: Project[],
-  onProjectsChanged: (projects: Project[]) => void
+  onProjectsChanged: (projects: Project[]) => void,
+  onProgress?: (p: SyncProgress) => void
 ): Promise<{ ok: boolean; error?: string }> {
   markSyncing()
 
@@ -115,13 +118,13 @@ export async function syncProjects(
       if (local && !rem) {
         await supabase.from('fr_projects').upsert(toRemote(local, user.id))
         merged.push(local)
-        await uploadProjectPhotos(local, user.id)
+        await uploadProjectPhotos(local, user.id, onProgress)
       } else if (!local && rem) {
         if (!rem.deleted) {
           const proj = toLocal(rem)
           await db.saveProject(proj)
           merged.push(proj)
-          await downloadProjectPhotos(proj, user.id)
+          await downloadProjectPhotos(proj, user.id, onProgress)
         }
       } else if (local && rem) {
         if (rem.deleted) {
@@ -134,11 +137,11 @@ export async function syncProjects(
             const proj = toLocal(rem)
             await db.saveProject(proj)
             merged.push(proj)
-            await downloadProjectPhotos(proj, user.id)
+            await downloadProjectPhotos(proj, user.id, onProgress)
           } else if (localTime > remoteTime) {
             await supabase.from('fr_projects').upsert(toRemote(local, user.id))
             merged.push(local)
-            await uploadProjectPhotos(local, user.id)
+            await uploadProjectPhotos(local, user.id, onProgress)
           } else {
             merged.push(local)
           }

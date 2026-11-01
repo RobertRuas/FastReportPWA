@@ -63,6 +63,19 @@
       "isInbox": false
     },
     {
+      "id": "c12-general",
+      "folder": "General",
+      "group": "C12",
+      "hotkeys": [
+        "0",
+        "g"
+      ],
+      "expectedCount": null,
+      "unlimited": true,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
       "id": "c12-t01",
       "folder": "T01",
       "group": "C12",
@@ -347,6 +360,19 @@
       ],
       "expectedCount": 7,
       "unlimited": false,
+      "isTrash": false,
+      "isInbox": false
+    },
+    {
+      "id": "c25-general",
+      "folder": "General",
+      "group": "C25",
+      "hotkeys": [
+        "0",
+        "g"
+      ],
+      "expectedCount": null,
+      "unlimited": true,
       "isTrash": false,
       "isInbox": false
     },
