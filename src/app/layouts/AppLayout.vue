@@ -13,15 +13,19 @@ import { useSettings } from '@/composables/useSettings'
 import { useAuth } from '@/composables/useAuth'
 import { startSettingsSync, stopSettingsSync } from '@/services/settingsSync'
 import { checkAccess } from '@/services/accessService'
+import { syncProjects } from '@/services/projectSync'
+import { useToast } from 'primevue/usetoast'
 import type { PageAction } from '@/app/router'
 
 const route = useRoute()
 const router = useRouter()
 const { overrideActions } = usePageActions()
 const { titleOverride } = usePageTitle()
-const { ready, load: loadProjects } = useProjects()
+const toast = useToast()
+const { projects, ready, load: loadProjects, replaceAll } = useProjects()
 const { settings, load: loadSettings } = useSettings()
 const { authenticated, currentUser, logout } = useAuth()
+const syncing = ref(false)
 
 const booted = ref(false)
 
@@ -51,9 +55,24 @@ const isHome = computed(() => route.meta.isHome === true)
 const pageTitle = computed(() => titleOverride.value ?? (route.meta.title as string) ?? '')
 const toolbarActions = computed(() => overrideActions.value ?? (route.meta.actions as PageAction[]) ?? [])
 
+async function onSync() {
+  if (syncing.value) return
+  syncing.value = true
+  const result = await syncProjects(projects.value, replaceAll)
+  syncing.value = false
+  if (result.ok) {
+    toast.add({ severity: 'success', summary: 'Sincronizado', life: 2000 })
+  } else {
+    toast.add({ severity: 'error', summary: 'Erro ao sincronizar', detail: result.error, life: 4000 })
+  }
+}
+
 const headerActions = computed<PageAction[]>(() => {
   if (isHome.value) {
-    return [{ icon: 'pi pi-plus', label: 'Novo projeto', handler: () => router.push('/projects/new') }]
+    return [
+      { icon: syncing.value ? 'pi pi-spin pi-spinner' : 'pi pi-sync', label: 'Sincronizar', handler: onSync },
+      { icon: 'pi pi-plus', label: 'Novo projeto', handler: () => router.push('/projects/new') }
+    ]
   }
   return []
 })
