@@ -1,5 +1,5 @@
 -- ============================================================
--- Fix: Criar tabela fr_backups se não existir
+-- Fix: Criar tabela fr_backups + políticas seguras
 -- Executar no SQL Editor do Supabase
 -- ============================================================
 
@@ -34,31 +34,32 @@ DROP POLICY IF EXISTS fr_backups_user_delete ON public.fr_backups;
 CREATE POLICY fr_backups_user_delete ON public.fr_backups
   FOR DELETE USING (auth.uid() = user_id);
 
--- Políticas do bucket fr-backups (idempotente)
+-- Políticas do bucket fr-backups
+-- Usa auth.jwt() em vez de SELECT em auth.users (mais seguro e compatível)
 DROP POLICY IF EXISTS fr_backups_select ON storage.objects;
 CREATE POLICY fr_backups_select ON storage.objects
   FOR SELECT USING (
     bucket_id = 'fr-backups' AND
-    (storage.foldername(name))[1] = (SELECT email FROM auth.users WHERE id = auth.uid())
+    (storage.foldername(name))[1] = (auth.jwt() ->> 'email')
   );
 
 DROP POLICY IF EXISTS fr_backups_insert ON storage.objects;
 CREATE POLICY fr_backups_insert ON storage.objects
   FOR INSERT WITH CHECK (
     bucket_id = 'fr-backups' AND
-    (storage.foldername(name))[1] = (SELECT email FROM auth.users WHERE id = auth.uid())
+    (storage.foldername(name))[1] = (auth.jwt() ->> 'email')
   );
 
 DROP POLICY IF EXISTS fr_backups_update ON storage.objects;
 CREATE POLICY fr_backups_update ON storage.objects
   FOR UPDATE USING (
     bucket_id = 'fr-backups' AND
-    (storage.foldername(name))[1] = (SELECT email FROM auth.users WHERE id = auth.uid())
+    (storage.foldername(name))[1] = (auth.jwt() ->> 'email')
   );
 
 DROP POLICY IF EXISTS fr_backups_delete ON storage.objects;
 CREATE POLICY fr_backups_delete ON storage.objects
   FOR DELETE USING (
     bucket_id = 'fr-backups' AND
-    (storage.foldername(name))[1] = (SELECT email FROM auth.users WHERE id = auth.uid())
+    (storage.foldername(name))[1] = (auth.jwt() ->> 'email')
   );

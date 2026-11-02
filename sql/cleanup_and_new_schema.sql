@@ -61,28 +61,28 @@ DROP POLICY IF EXISTS fr_backups_select ON storage.objects;
 CREATE POLICY fr_backups_select ON storage.objects
   FOR SELECT USING (
     bucket_id = 'fr-backups' AND
-    (storage.foldername(name))[1] = (SELECT email FROM auth.users WHERE id = auth.uid())
+    (storage.foldername(name))[1] = (auth.jwt() ->> 'email')
   );
 
 DROP POLICY IF EXISTS fr_backups_insert ON storage.objects;
 CREATE POLICY fr_backups_insert ON storage.objects
   FOR INSERT WITH CHECK (
     bucket_id = 'fr-backups' AND
-    (storage.foldername(name))[1] = (SELECT email FROM auth.users WHERE id = auth.uid())
+    (storage.foldername(name))[1] = (auth.jwt() ->> 'email')
   );
 
 DROP POLICY IF EXISTS fr_backups_update ON storage.objects;
 CREATE POLICY fr_backups_update ON storage.objects
   FOR UPDATE USING (
     bucket_id = 'fr-backups' AND
-    (storage.foldername(name))[1] = (SELECT email FROM auth.users WHERE id = auth.uid())
+    (storage.foldername(name))[1] = (auth.jwt() ->> 'email')
   );
 
 DROP POLICY IF EXISTS fr_backups_delete ON storage.objects;
 CREATE POLICY fr_backups_delete ON storage.objects
   FOR DELETE USING (
     bucket_id = 'fr-backups' AND
-    (storage.foldername(name))[1] = (SELECT email FROM auth.users WHERE id = auth.uid())
+    (storage.foldername(name))[1] = (auth.jwt() ->> 'email')
   );
 
 -- 10. Tabela fr_backups — metadados dos backups

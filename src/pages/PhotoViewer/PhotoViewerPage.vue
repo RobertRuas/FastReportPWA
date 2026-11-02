@@ -27,8 +27,6 @@ const { t } = useI18n()
 
 const currentIndex = ref(0)
 const slideDir = ref<'next' | 'prev'>('next')
-const flashLabel = ref('')
-const showFlash = ref(false)
 const activeGroup = ref<string | null>(null)
 const busy = ref(false)
 const showMoveOverlay = ref(false)
@@ -127,29 +125,26 @@ function slotCount(slotId: string): number {
   return project.value.photos.filter(p => p.slot === slotId).length
 }
 
+const lastClassified = ref('')
+
 function classifyTo(slot: Slot, label: string) {
   if (busy.value || !project.value || !currentPhoto.value) return
-  busy.value = true
 
   const photoId = currentPhoto.value.id
 
-  flashLabel.value = label
-  showFlash.value = true
+  lastClassified.value = slot.id
   navigator.vibrate?.(8)
 
-  setTimeout(() => {
-    showFlash.value = false
+  const fromSlot = movePhoto(project.value!, photoId, slot.id)
+  undoPush({ type: 'move', photoId, fromSlot, toSlot: slot.id })
+  touchProject(project.value!)
 
-    const fromSlot = movePhoto(project.value!, photoId, slot.id)
-    undoPush({ type: 'move', photoId, fromSlot, toSlot: slot.id })
-    touchProject(project.value!)
+  if (currentIndex.value >= scopedPhotos.value.length) {
+    currentIndex.value = Math.max(0, scopedPhotos.value.length - 1)
+  }
+  slideDir.value = 'next'
 
-    if (currentIndex.value >= scopedPhotos.value.length) {
-      currentIndex.value = Math.max(0, scopedPhotos.value.length - 1)
-    }
-    slideDir.value = 'next'
-    busy.value = false
-  }, 350)
+  setTimeout(() => { lastClassified.value = '' }, 300)
 }
 
 function selectCategory(cat: CategoryItem) {
@@ -481,11 +476,6 @@ function goToReview() {
           </div>
         </Transition>
 
-        <Transition name="flash">
-          <div v-if="showFlash" class="flash-overlay">
-            <span class="flash-text">{{ flashLabel }}</span>
-          </div>
-        </Transition>
       </div>
 
       <div class="sorting-keyboard">
@@ -496,7 +486,8 @@ function goToReview() {
             class="kb-cat"
             :class="{
               'kb-cat-active': activeGroup === cat.key,
-              'kb-cat-lixo': cat.key === 'trash'
+              'kb-cat-lixo': cat.key === 'trash',
+              'kb-cat-done': cat.slot && lastClassified === cat.slot.id
             }"
             :style="activeGroup === cat.key && cat.bg ? { background: cat.bg, borderColor: cat.color, color: cat.color } : {}"
             @click="selectCategory(cat)"
@@ -512,7 +503,8 @@ function goToReview() {
             class="kb-sub"
             :class="{
               'kb-sub-disabled': mapWithGroups && !activeGroup,
-              'kb-sub-full': slot.expectedCount !== null && slotCount(slot.id) >= slot.expectedCount
+              'kb-sub-full': slot.expectedCount !== null && slotCount(slot.id) >= slot.expectedCount,
+              'kb-sub-done': lastClassified === slot.id
             }"
             :style="activeGroup && activeGroupColor ? { borderColor: activeGroupColor } : {}"
             @click="selectSub(slot)"
@@ -710,6 +702,13 @@ function goToReview() {
   background: var(--color-bg-secondary);
 }
 
+.kb-cat-done {
+  background: #10B981 !important;
+  border-color: #10B981 !important;
+  color: #fff !important;
+  transition: background 0.08s ease, border-color 0.08s ease, color 0.08s ease;
+}
+
 .kb-cat-lixo {
   color: var(--color-error);
   border-color: rgba(220, 38, 38, 0.3);
@@ -745,6 +744,18 @@ function goToReview() {
   background: var(--color-bg-secondary);
 }
 
+.kb-sub-done {
+  background: #10B981 !important;
+  border-color: #10B981 !important;
+  color: #fff !important;
+  transition: background 0.08s ease, border-color 0.08s ease, color 0.08s ease;
+}
+
+.kb-sub-done .kb-sub-label,
+.kb-sub-done .kb-sub-count {
+  color: #fff !important;
+}
+
 .kb-sub-disabled {
   opacity: 0.4;
   pointer-events: none;
@@ -772,48 +783,6 @@ function goToReview() {
   color: #10B981;
 }
 
-/* --- Flash Overlay --- */
-.flash-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-  z-index: 5;
-}
-
-.flash-text {
-  font-size: 48px;
-  font-weight: 800;
-  color: #fff;
-  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.5);
-  letter-spacing: 2px;
-}
-
-.flash-enter-active {
-  transition: opacity 0.08s ease, transform 0.08s ease;
-}
-
-.flash-leave-active {
-  transition: opacity 0.3s ease, transform 0.3s ease;
-}
-
-.flash-enter-from {
-  opacity: 0;
-  transform: scale(0.7);
-}
-
-.flash-enter-to,
-.flash-leave-from {
-  opacity: 1;
-  transform: scale(1);
-}
-
-.flash-leave-to {
-  opacity: 0;
-  transform: scale(1.2);
-}
 
 /* --- Done Area --- */
 .done-area {
@@ -1040,9 +1009,7 @@ function goToReview() {
   .slide-next-enter-active,
   .slide-next-leave-active,
   .slide-prev-enter-active,
-  .slide-prev-leave-active,
-  .flash-enter-active,
-  .flash-leave-active {
+  .slide-prev-leave-active {
     transition: none;
   }
 }
