@@ -220,6 +220,9 @@ export default {
   'sync.newDeviceBackups': 'projects available in cloud',
   'sync.needsSync': 'Changes not synced',
   'sync.syncFirst': 'Sync before sharing',
+  'sync.cloudProjects': 'Cloud projects',
+  'sync.downloadError': 'Download failed',
+  'sync.downloadSuccess': 'Project downloaded',
 
   // Access control
   'access.title': 'Allowed users',

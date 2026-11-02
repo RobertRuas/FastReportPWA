@@ -220,6 +220,9 @@ export default {
   'sync.newDeviceBackups': 'projetos disponíveis na nuvem',
   'sync.needsSync': 'Alterações por sincronizar',
   'sync.syncFirst': 'Sincronize antes de partilhar',
+  'sync.cloudProjects': 'Projetos na nuvem',
+  'sync.downloadError': 'Erro ao transferir',
+  'sync.downloadSuccess': 'Projeto transferido',
 
   // Access control
   'access.title': 'Utilizadores permitidos',

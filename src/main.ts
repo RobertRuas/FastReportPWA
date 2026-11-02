@@ -44,5 +44,9 @@ app.use(ToastService)
 
 app.mount('#app')
 
+if (typeof (window as any).__splashReady === 'function') {
+  (window as any).__splashReady()
+}
+
 document.addEventListener('gesturestart', e => e.preventDefault())
 document.addEventListener('gesturechange', e => e.preventDefault())

@@ -24,13 +24,48 @@ const { currentUser } = useAuth()
 const { projects, projectStats, totalBytes, removeProject, markSynced } = useProjects()
 const importing = ref(false)
 const syncingId = ref('')
+const remoteBackups = ref<RemoteBackup[]>([])
+const downloadingId = ref('')
 
 const storageUsed = ref(0)
 
 onMounted(async () => {
   const est = await db.estimateStorage()
   if (est) storageUsed.value = est.used
+  if (currentUser.value?.email) {
+    loadRemoteBackups()
+  }
 })
+
+async function loadRemoteBackups() {
+  const backups = await listRemoteBackups()
+  const localIds = new Set(projects.value.map(p => p.id))
+  remoteBackups.value = backups.filter(b => !localIds.has(b.id))
+}
+
+async function onDownloadBackup(backup: RemoteBackup) {
+  downloadingId.value = backup.id
+  try {
+    const result = await downloadBackup(backup)
+    if (!result.ok || !result.blob) {
+      toast.add({ severity: 'error', summary: t('sync.downloadError'), detail: result.error, life: 4000 })
+      return
+    }
+    const imported = await importBackupZip(result.blob, {
+      id: backup.id,
+      projectName: backup.projectName,
+      projectSlug: backup.projectSlug,
+      syncedAt: backup.syncedAt
+    })
+    remoteBackups.value = remoteBackups.value.filter(b => b.id !== backup.id)
+    toast.add({ severity: 'success', summary: t('sync.downloadSuccess'), life: 2000 })
+    router.push(`/projects/${imported.projectId}`)
+  } catch (err: any) {
+    toast.add({ severity: 'error', summary: t('sync.downloadError'), detail: err?.message, life: 4000 })
+  } finally {
+    downloadingId.value = ''
+  }
+}
 
 const mapsCount = getAllMaps().length
 
@@ -71,6 +106,19 @@ function formatDate(iso: string): string {
   if (days < 7) return lang.value === 'pt' ? `${days} dias` : `${days} days`
   const locale = lang.value === 'pt' ? 'pt-PT' : 'en-GB'
   return d.toLocaleDateString(locale, { day: 'numeric', month: 'short' })
+}
+
+function formatDateTime(iso: string): string {
+  const d = new Date(iso)
+  const now = new Date()
+  const diff = now.getTime() - d.getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return lang.value === 'pt' ? 'agora' : 'now'
+  if (mins < 60) return `${mins}min`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h`
+  const locale = lang.value === 'pt' ? 'pt-PT' : 'en-GB'
+  return d.toLocaleDateString(locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
 function formatBytes(bytes: number): string {
@@ -222,6 +270,7 @@ async function onImportZip() {
               <span class="project-name">{{ project.name }}</span>
               <span class="project-meta">
                 {{ mapName(project.mapId) }} · {{ formatDate(project.updatedAt) }}
+                <template v-if="project.syncedAt"> · <i class="pi pi-cloud" style="font-size:10px"></i> {{ formatDateTime(project.syncedAt) }}</template>
               </span>
               <div class="project-progress-row">
                 <ProgressBar
@@ -257,7 +306,35 @@ async function onImportZip() {
       </div>
     </template>
 
-    <div v-else class="empty-state">
+    <!-- Remote backups available for download -->
+    <template v-if="remoteBackups.length > 0">
+      <div class="list-header">
+        <span class="list-header-title"><i class="pi pi-cloud-download" style="font-size:14px;margin-right:6px"></i>{{ t('sync.cloudProjects') }}</span>
+      </div>
+
+      <div class="project-list">
+        <button
+          v-for="backup in remoteBackups"
+          :key="backup.id"
+          class="project-item"
+          @click="onDownloadBackup(backup)"
+          :disabled="downloadingId === backup.id"
+        >
+          <span class="project-thumb project-thumb-cloud">
+            <i :class="downloadingId === backup.id ? 'pi pi-spin pi-spinner' : 'pi pi-cloud-download'"></i>
+          </span>
+          <div class="project-info">
+            <span class="project-name">{{ backup.projectName }}</span>
+            <span class="project-meta">
+              {{ formatBytes(backup.fileSize) }} · {{ formatDateTime(backup.syncedAt) }}
+            </span>
+          </div>
+          <i class="pi pi-download project-arrow" style="font-size:14px;color:var(--color-accent)"></i>
+        </button>
+      </div>
+    </template>
+
+    <div v-else-if="sortedProjects.length === 0" class="empty-state">
       <span class="empty-icon">
         <i class="pi pi-folder-open"></i>
       </span>
@@ -480,6 +557,19 @@ async function onImportZip() {
 .project-arrow {
   font-size: 12px;
   color: var(--color-text-secondary);
+}
+
+.project-thumb-cloud {
+  background: #3B82F6;
+}
+
+.project-list > .project-item + .project-item {
+  border-top: 1px solid var(--color-border);
+}
+
+.project-item:disabled {
+  opacity: 0.6;
+  pointer-events: none;
 }
 
 /* --- Empty State --- */
