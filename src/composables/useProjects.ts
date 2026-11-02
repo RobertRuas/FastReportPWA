@@ -3,7 +3,6 @@ import type { Project, Photo } from '@/models/types'
 import * as db from '@/services/db'
 import { slugify } from '@/services/slugify'
 import { getMap } from '@/services/mapCatalog'
-import { removeProjectFromSyncMap } from '@/composables/useProjectSyncMap'
 import { addDefaultPhoto } from '@/services/defaultPhoto'
 
 const projects = ref<Project[]>([])
@@ -18,6 +17,14 @@ function generateId(): string {
 export function useProjects() {
   async function load() {
     const data = await db.boot()
+    let needsSave = false
+    for (const p of data.projects) {
+      if ((p as any).cols === undefined) { p.cols = 7; needsSave = true }
+      if ((p as any).syncedAt === undefined) { p.syncedAt = null; needsSave = true }
+    }
+    if (needsSave) {
+      for (const p of data.projects) await db.saveProject(p)
+    }
     projects.value = data.projects
     ready.value = true
   }
@@ -26,7 +33,7 @@ export function useProjects() {
     return projects.value.find(p => p.id === id)
   }
 
-  async function createProject(name: string, mapId: string): Promise<Project> {
+  async function createProject(name: string, mapId: string, customId?: string): Promise<Project> {
     const map = getMap(mapId)
     if (!map) throw new Error(`Map not found: ${mapId}`)
 
@@ -40,13 +47,15 @@ export function useProjects() {
 
     const now = new Date().toISOString()
     const project: Project = {
-      id: generateId(),
+      id: customId ?? generateId(),
       name,
       slug,
       mapId,
       createdAt: now,
       updatedAt: now,
       exportedAt: null,
+      syncedAt: null,
+      cols: 7,
       photos: []
     }
 
@@ -66,7 +75,6 @@ export function useProjects() {
     await db.deleteProject(id)
     const idx = projects.value.findIndex(p => p.id === id)
     if (idx >= 0) projects.value.splice(idx, 1)
-    removeProjectFromSyncMap(id)
   }
 
   function touchProject(project: Project) {
@@ -85,6 +93,11 @@ export function useProjects() {
     const now = new Date().toISOString()
     project.updatedAt = now
     project.exportedAt = now
+    db.saveProjectNow(project)
+  }
+
+  function markSynced(project: Project) {
+    project.syncedAt = new Date().toISOString()
     db.saveProjectNow(project)
   }
 
@@ -122,6 +135,7 @@ export function useProjects() {
     touchProject,
     saveProjectNow,
     markExported,
+    markSynced,
     photosInSlot,
     projectStats,
     totalBytes,

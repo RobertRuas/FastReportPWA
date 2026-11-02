@@ -6,9 +6,10 @@ import { useConfirm } from 'primevue/useconfirm'
 import ProgressBar from 'primevue/progressbar'
 import { useProjects } from '@/composables/useProjects'
 import { useI18n } from '@/composables/useI18n'
+import { useAuth } from '@/composables/useAuth'
 import { usePageTitle } from '@/composables/usePageTitle'
-import { isProjectSynced } from '@/composables/useProjectSyncMap'
-import { syncSingleProject } from '@/services/projectSync'
+import { projectSyncState } from '@/composables/useProjectSyncMap'
+import { syncProject as backupSyncProject, deleteBackup } from '@/services/backupSync'
 import { getMap } from '@/services/mapCatalog'
 import SwipeActions from '@/components/common/SwipeActions.vue'
 import type { SwipeAction } from '@/components/common/SwipeActions.vue'
@@ -18,7 +19,8 @@ const router = useRouter()
 const toast = useToast()
 const confirm = useConfirm()
 const { t, lang } = useI18n()
-const { projects, projectStats, removeProject } = useProjects()
+const { currentUser } = useAuth()
+const { projects, projectStats, removeProject, markSynced } = useProjects()
 const { setTitle } = usePageTitle()
 
 const filter = computed(() => (route.query.filter as string) ?? 'all')
@@ -91,10 +93,12 @@ function getSwipeActions(project: typeof projects.value[0]): SwipeAction[] {
 const syncingId = ref('')
 
 async function onSyncProject(project: typeof projects.value[0]) {
+  if (!currentUser.value?.email) return
   syncingId.value = project.id
-  const result = await syncSingleProject(project)
+  const result = await backupSyncProject(project, currentUser.value.email)
   syncingId.value = ''
   if (result.ok) {
+    markSynced(project)
     toast.add({ severity: 'success', summary: t('sync.syncSuccess'), life: 2000 })
   } else {
     toast.add({ severity: 'error', summary: t('sync.syncError'), detail: result.error, life: 4000 })
@@ -115,6 +119,9 @@ function onDeleteProject(project: typeof projects.value[0]) {
     rejectLabel: t('app.cancel'),
     acceptClass: 'p-button-danger',
     accept: async () => {
+      if (project.syncedAt && currentUser.value?.email) {
+        await deleteBackup(project.id, currentUser.value.email, project.slug)
+      }
       await removeProject(project.id)
       toast.add({ severity: 'info', summary: t('delete.success'), life: 2000 })
     }
@@ -167,9 +174,13 @@ function onDeleteProject(project: typeof projects.value[0]) {
             <span
               v-else
               class="project-sync-dot"
-              :class="isProjectSynced(project.id, project.updatedAt) ? 'project-sync-dot-synced' : 'project-sync-dot-pending'"
+              :class="{
+                'project-sync-dot-synced': projectSyncState(project) === 'synced',
+                'project-sync-dot-stale': projectSyncState(project) === 'stale',
+                'project-sync-dot-pending': projectSyncState(project) === 'never'
+              }"
             >
-              <i :class="isProjectSynced(project.id, project.updatedAt) ? 'pi pi-cloud' : 'pi pi-cloud-upload'"></i>
+              <i :class="projectSyncState(project) === 'never' ? 'pi pi-cloud-upload' : 'pi pi-cloud'"></i>
             </span>
             <i class="pi pi-chevron-right project-arrow"></i>
           </div>
@@ -294,6 +305,10 @@ function onDeleteProject(project: typeof projects.value[0]) {
 
 .project-sync-dot-synced {
   color: #10B981;
+}
+
+.project-sync-dot-stale {
+  color: #D97706;
 }
 
 .project-sync-dot-pending {

@@ -177,12 +177,10 @@ export function deleteBlobsForProject(projectId: string): Promise<void> {
 // --- Settings ---
 
 const SETTINGS_DEFAULTS: AppSettings = {
-  cols: 'auto',
   langPref: 'auto',
   ui: 1,
   userName: '',
-  userEmail: '',
-  autoSync: false
+  userEmail: ''
 }
 
 export async function getSettings(): Promise<AppSettings> {

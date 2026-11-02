@@ -111,6 +111,11 @@ const trashCount = computed(() => {
 
 const isEmpty = computed(() => stats.value.sorted === 0 && stats.value.trashed === 0)
 
+const gridCols = computed(() => project.value?.cols ?? 7)
+const gridStyle = computed(() => ({
+  gridTemplateColumns: `repeat(${gridCols.value}, 1fr)`
+}))
+
 // --- Inter-slot drag-and-drop ---
 const dragPhotoId = ref<string | null>(null)
 const dragFromSlot = ref<string | null>(null)
@@ -484,6 +489,7 @@ function isSlotFull(slot: Slot, count: number): boolean {
             </div>
             <div
               class="photo-grid"
+              :style="gridStyle"
               :data-drop-slot="slotItem.slot.id"
               :class="{ 'photo-grid-drop': dropTargetSlot === slotItem.slot.id }"
             >
@@ -784,7 +790,6 @@ function isSlotFull(slot: Slot, count: number): boolean {
 
 .photo-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
   gap: 3px;
   position: relative;
   min-height: 28px;

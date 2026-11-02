@@ -58,6 +58,7 @@ export default {
   'project.empty.title': 'No photos',
   'project.empty.text': 'Import photos to get started.',
   'project.notFound': 'Project not found.',
+  'project.cols': 'Columns',
   'project.importSuccess': '{count} photos imported',
   'project.importError': 'Error importing photos',
   'project.actions.export': 'Export ZIP',
@@ -216,6 +217,9 @@ export default {
   'sync.cloudSync': 'Cloud Sync',
   'sync.newDeviceTitle': 'New device detected',
   'sync.newDeviceHint': 'Your projects were loaded. Sync to transfer photos.',
+  'sync.newDeviceBackups': 'projects available in cloud',
+  'sync.needsSync': 'Changes not synced',
+  'sync.syncFirst': 'Sync before sharing',
 
   // Access control
   'access.title': 'Allowed users',

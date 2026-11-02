@@ -3,12 +3,10 @@ import type { AppSettings } from '@/models/types'
 import * as db from '@/services/db'
 
 const defaults: AppSettings = {
-  cols: 'auto',
   langPref: 'auto',
   ui: 1,
   userName: '',
-  userEmail: '',
-  autoSync: false
+  userEmail: ''
 }
 
 const settings = reactive<AppSettings>({ ...defaults })

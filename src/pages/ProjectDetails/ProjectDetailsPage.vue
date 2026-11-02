@@ -10,10 +10,10 @@ import { useProjectSession } from '@/composables/useProjectSession'
 import { useProjects } from '@/composables/useProjects'
 import { usePhotoStore } from '@/composables/usePhotoStore'
 import { useI18n } from '@/composables/useI18n'
-import { isProjectSynced } from '@/composables/useProjectSyncMap'
+import { isProjectSynced, isProjectSyncStale } from '@/composables/useProjectSyncMap'
 import { exportProject, shareOrSave, type ExportLayout } from '@/services/exportService'
-import { exportAndShareLink } from '@/services/exportEmail'
-import { syncSingleProject, syncDeleteProject } from '@/services/projectSync'
+import { syncProject as backupSyncProject, getShareUrl, deleteBackup } from '@/services/backupSync'
+import { useAuth } from '@/composables/useAuth'
 import ProjectTabs from '@/components/common/ProjectTabs.vue'
 
 const route = useRoute()
@@ -25,9 +25,10 @@ const { setTitle } = usePageTitle()
 const { setActions } = usePageActions()
 const { importPhotos } = usePhotoImport()
 const { project, map, stats, openProject, closeProject } = useProjectSession()
-const { markExported, removeProject } = useProjects()
+const { markExported, markSynced, removeProject, touchProject } = useProjects()
 const { revokeAllUrls } = usePhotoStore()
 
+const { currentUser } = useAuth()
 const projectId = computed(() => route.params.id as string)
 const syncing = ref(false)
 const syncProgress = ref(0)
@@ -40,6 +41,15 @@ onMounted(async () => {
     setTitle(project.value.name)
   }
 })
+
+function changeCols(delta: number) {
+  if (!project.value) return
+  const next = Math.min(12, Math.max(4, project.value.cols + delta))
+  if (next !== project.value.cols) {
+    project.value.cols = next
+    touchProject(project.value)
+  }
+}
 
 const allSorted = computed(() => stats.value.total > 0 && stats.value.pending === 0)
 const hasPending = computed(() => stats.value.pending > 0)
@@ -91,32 +101,47 @@ async function doExport(layout: ExportLayout) {
 }
 
 async function doExportShare() {
-  if (!project.value || emailExporting.value) return
+  if (!project.value || emailExporting.value || !currentUser.value) return
+
+  if (!project.value.syncedAt) {
+    toast.add({ severity: 'warn', summary: t('sync.syncFirst'), life: 3000 })
+    showExportModal.value = false
+    return
+  }
 
   emailExporting.value = true
-  exporting.value = true
-  exportProgress.value = 0
-  exportTotal.value = stats.value.sorted
-
   try {
-    const result = await exportAndShareLink(project.value, (p) => {
-      exportProgress.value = p.current
-      exportTotal.value = p.total
-    })
-
-    if (result.ok) {
-      markExported(project.value)
-      showExportModal.value = false
-      toast.add({ severity: 'success', summary: t('export.shareSuccess'), life: 4000 })
-    } else {
+    const result = await getShareUrl(currentUser.value.email, project.value.slug)
+    if (!result.ok || !result.url) {
       toast.add({ severity: 'error', summary: t('export.shareError'), detail: result.error, life: 5000 })
+      return
     }
+
+    const base = window.location.origin + window.location.pathname
+    const params = new URLSearchParams({ url: result.url, name: project.value.name })
+    const downloadPageUrl = `${base}#/download?${params.toString()}`
+
+    if (navigator.share) {
+      await navigator.share({
+        title: `FastReport: ${project.value.name}`,
+        text: `Download do projeto "${project.value.name}" — link válido por 1 hora.`,
+        url: downloadPageUrl
+      })
+    } else {
+      await navigator.clipboard.writeText(downloadPageUrl)
+    }
+
+    showExportModal.value = false
+    toast.add({ severity: 'success', summary: t('export.shareSuccess'), life: 4000 })
   } catch (err: any) {
+    if (err?.name === 'AbortError') {
+      showExportModal.value = false
+      return
+    }
     console.error('[FastReport] Share export failed:', err)
     toast.add({ severity: 'error', summary: t('export.shareError'), life: 5000 })
   } finally {
     emailExporting.value = false
-    exporting.value = false
   }
 }
 
@@ -139,20 +164,21 @@ async function onImport() {
 }
 
 async function onSyncProject() {
-  if (!project.value || syncing.value) return
+  if (!project.value || syncing.value || !currentUser.value) return
   syncing.value = true
   syncProgress.value = 0
   syncTotal.value = 0
-  const result = await syncSingleProject(project.value, (p) => {
+  const result = await backupSyncProject(project.value, currentUser.value.email, (p) => {
     syncProgress.value = p.current
     syncTotal.value = p.total
   })
-  syncing.value = false
   if (result.ok) {
+    markSynced(project.value)
     toast.add({ severity: 'success', summary: t('sync.syncSuccess'), life: 2000 })
   } else {
     toast.add({ severity: 'error', summary: t('sync.syncError'), detail: result.error, life: 4000 })
   }
+  syncing.value = false
 }
 
 function onDeleteProject() {
@@ -170,11 +196,13 @@ function onDeleteProject() {
     rejectLabel: t('app.cancel'),
     acceptClass: 'p-button-danger',
     accept: async () => {
-      const id = project.value!.id
+      const p = project.value!
       closeProject()
       revokeAllUrls()
-      await syncDeleteProject(id)
-      await removeProject(id)
+      if (p.syncedAt && currentUser.value) {
+        deleteBackup(p.id, currentUser.value.email, p.slug).catch(() => {})
+      }
+      await removeProject(p.id)
       toast.add({ severity: 'info', summary: t('delete.success'), life: 2000 })
       router.replace('/')
     }
@@ -200,10 +228,34 @@ setActions([
       <span class="summary-sep">&middot;</span>
       <span
         class="summary-sync"
-        :class="isProjectSynced(project.id, project.updatedAt) ? 'sync-ok' : 'sync-pending'"
+        :class="isProjectSynced(project) ? 'sync-ok' : isProjectSyncStale(project) ? 'sync-stale' : 'sync-pending'"
       >
-        <i :class="isProjectSynced(project.id, project.updatedAt) ? 'pi pi-cloud' : 'pi pi-cloud-upload'"></i>
+        <i :class="isProjectSynced(project) ? 'pi pi-cloud' : 'pi pi-cloud-upload'"></i>
       </span>
+    </div>
+
+    <!-- Cols control -->
+    <div class="cols-control">
+      <i class="pi pi-th-large cols-icon"></i>
+      <span class="cols-label">{{ t('project.cols') }}</span>
+      <div class="cols-stepper">
+        <button class="cols-btn" :disabled="!project || project.cols <= 4" @click="changeCols(-1)">
+          <i class="pi pi-minus"></i>
+        </button>
+        <span class="cols-value">{{ project?.cols ?? 7 }}</span>
+        <button class="cols-btn" :disabled="!project || project.cols >= 12" @click="changeCols(1)">
+          <i class="pi pi-plus"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Sync alert -->
+    <div v-if="project.syncedAt && new Date(project.updatedAt) > new Date(project.syncedAt)" class="sync-alert">
+      <i class="pi pi-exclamation-triangle"></i>
+      <span>{{ t('sync.needsSync') }}</span>
+      <button class="sync-alert-btn" @click="onSyncProject">
+        <i class="pi pi-sync"></i> {{ t('sync.syncNow') }}
+      </button>
     </div>
 
     <div v-if="syncing" class="sync-progress">
@@ -344,6 +396,96 @@ setActions([
   gap: var(--spacing-md);
 }
 
+/* --- Cols Control --- */
+.cols-control {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+}
+
+.cols-icon {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+}
+
+.cols-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-primary);
+  font-weight: 500;
+  flex: 1;
+}
+
+.cols-stepper {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.cols-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.cols-btn:active { background: var(--color-border); }
+.cols-btn:disabled { opacity: 0.3; cursor: default; }
+
+.cols-value {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  min-width: 20px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Sync Alert --- */
+.sync-alert {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: #FEF3C7;
+  border: 1px solid #F59E0B;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-xs);
+  color: #92400E;
+}
+
+.sync-alert i { font-size: 14px; color: #D97706; }
+.sync-alert span { flex: 1; }
+
+.sync-alert-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: #D97706;
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  white-space: nowrap;
+}
+
+.sync-alert-btn:active { opacity: 0.8; }
+
 /* --- Summary Row --- */
 .summary-row {
   display: flex;
@@ -370,6 +512,7 @@ setActions([
 }
 
 .sync-ok { color: #10B981; }
+.sync-stale { color: #D97706; }
 .sync-pending { color: var(--color-text-secondary); opacity: 0.5; }
 
 /* --- Sync Progress --- */

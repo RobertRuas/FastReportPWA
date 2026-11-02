@@ -4,6 +4,8 @@ import type { Project } from '@/models/types'
 import { usePhotoStore } from './usePhotoStore'
 import { useProjects } from './useProjects'
 
+const CONCURRENCY = 3
+
 const importing = ref(false)
 const progress = ref(0)
 const totalFiles = ref(0)
@@ -37,6 +39,24 @@ export function usePhotoImport() {
     )
   }
 
+  async function processOne(file: File, project: Project): Promise<boolean> {
+    try {
+      currentFileName.value = file.name
+      const processed = await processImage(file)
+      const thumb = await generateThumb(processed.blob)
+      await addPhotosToInbox(project, [{
+        blob: processed.blob,
+        thumb,
+        width: processed.width,
+        height: processed.height
+      }])
+      return true
+    } catch (err) {
+      console.error('[FastReport] Failed to process:', file.name, err)
+      return false
+    }
+  }
+
   async function importPhotos(project: Project): Promise<number> {
     const files = await selectFiles()
     if (files.length === 0) return 0
@@ -49,38 +69,38 @@ export function usePhotoImport() {
     processedFiles.value = 0
     currentFileName.value = ''
 
-    try {
-      const results: { blob: Blob; thumb: Blob; width: number; height: number }[] = []
+    let completed = 0
+    let succeeded = 0
 
-      for (let i = 0; i < sorted.length; i++) {
-        currentFileName.value = sorted[i].name
-        try {
-          const processed = await processImage(sorted[i])
-          const thumb = await generateThumb(processed.blob)
-          results.push({
-            blob: processed.blob,
-            thumb,
-            width: processed.width,
-            height: processed.height
+    return new Promise<number>((resolve) => {
+      let nextIndex = 0
+      let running = 0
+
+      function startNext() {
+        while (running < CONCURRENCY && nextIndex < sorted.length) {
+          const file = sorted[nextIndex++]
+          running++
+          processOne(file, project).then((ok) => {
+            if (ok) succeeded++
+            running--
+            completed++
+            processedFiles.value = completed
+            progress.value = Math.round((completed / sorted.length) * 100)
+
+            if (completed === sorted.length) {
+              saveProjectNow(project).then(() => {
+                importing.value = false
+                resolve(succeeded)
+              })
+            } else {
+              startNext()
+            }
           })
-        } catch (err) {
-          console.error('[FastReport] Failed to process:', sorted[i].name, err)
         }
-
-        processedFiles.value = i + 1
-        progress.value = Math.round(((i + 1) / sorted.length) * 100)
-        await new Promise(r => requestAnimationFrame(r))
       }
 
-      if (results.length > 0) {
-        await addPhotosToInbox(project, results)
-        await saveProjectNow(project)
-      }
-
-      return results.length
-    } finally {
-      importing.value = false
-    }
+      startNext()
+    })
   }
 
   return {

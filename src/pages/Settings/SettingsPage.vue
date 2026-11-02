@@ -5,17 +5,13 @@ import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
-import ToggleSwitch from 'primevue/toggleswitch'
 import JSZip from 'jszip'
 import { useSettings } from '@/composables/useSettings'
 import { useProjects } from '@/composables/useProjects'
 import { useAuth } from '@/composables/useAuth'
 import { useI18n } from '@/composables/useI18n'
-import { useSyncStatus } from '@/composables/useSyncStatus'
 import { exportProject } from '@/services/exportService'
-import { syncProjects } from '@/services/projectSync'
 import { stopSettingsSync } from '@/services/settingsSync'
-import { resetSyncState } from '@/composables/useSyncStatus'
 import { isAdmin } from '@/services/accessService'
 import * as db from '@/services/db'
 
@@ -24,14 +20,12 @@ const toast = useToast()
 const confirm = useConfirm()
 const { t } = useI18n()
 const { settings } = useSettings()
-const { projects, totalBytes, replaceAll } = useProjects()
+const { projects, totalBytes } = useProjects()
 const { currentUser, logout, updateProfile } = useAuth()
-const { syncState, syncedTimeAgo, syncErrorMsg } = useSyncStatus()
 
 const profileName = ref('')
 const profileEmail = ref('')
 const savingProfile = ref(false)
-const syncing = ref(false)
 const showAdmin = computed(() => isAdmin(currentUser.value?.email))
 const storageUsed = ref(0)
 const storageQuota = ref(0)
@@ -147,17 +141,6 @@ async function onBackup() {
   }
 }
 
-async function onSyncNow() {
-  syncing.value = true
-  const result = await syncProjects(projects.value, replaceAll)
-  syncing.value = false
-  if (result.ok) {
-    toast.add({ severity: 'success', summary: t('sync.syncSuccess'), life: 2000 })
-  } else {
-    toast.add({ severity: 'error', summary: t('sync.syncError'), detail: result.error, life: 4000 })
-  }
-}
-
 function onLogout() {
   confirm.require({
     message: t('auth.logout.message'),
@@ -167,7 +150,6 @@ function onLogout() {
     rejectLabel: t('app.cancel'),
     accept: async () => {
       stopSettingsSync()
-      resetSyncState()
       await logout()
       router.replace({ name: 'auth' })
     }
@@ -285,7 +267,7 @@ function onResetAll() {
 
     <!-- Storage & Sync (unified) -->
     <section class="section">
-      <span class="section-label">{{ t('settings.storage') }} & {{ t('sync.cloudSync') }}</span>
+      <span class="section-label">{{ t('settings.storage') }}</span>
 
       <div class="stats-row">
         <div class="stat-chip">
@@ -313,45 +295,6 @@ function onResetAll() {
         <span class="storage-detail">{{ formatBytes(storageUsed) }} / {{ formatBytes(storageQuota) }}</span>
       </div>
 
-      <div class="card">
-        <div class="row-between">
-          <div class="row-col">
-            <span class="row-label">{{ t('sync.cloudSync') }}</span>
-            <span class="sync-status" :class="'sync-status-' + syncState">
-              <template v-if="syncState === 'synced'">
-                <i class="pi pi-check-circle"></i> {{ t('sync.synced') }}
-              </template>
-              <template v-else-if="syncState === 'syncing'">
-                <i class="pi pi-spin pi-spinner"></i> {{ t('sync.syncing') }}
-              </template>
-              <template v-else-if="syncState === 'pending'">
-                <i class="pi pi-cloud-upload"></i> {{ t('sync.pending') }}
-              </template>
-              <template v-else-if="syncState === 'error'">
-                <i class="pi pi-exclamation-circle"></i> {{ t('sync.error') }}
-              </template>
-              <template v-else>
-                <i class="pi pi-cloud"></i> —
-              </template>
-            </span>
-          </div>
-          <button class="sync-btn" :disabled="syncing" @click="onSyncNow">
-            <i :class="syncing ? 'pi pi-spin pi-spinner' : 'pi pi-sync'"></i>
-          </button>
-        </div>
-        <span v-if="syncState === 'synced' && syncedTimeAgo" class="storage-detail">{{ syncedTimeAgo }}</span>
-        <span v-if="syncState === 'error' && syncErrorMsg" class="storage-detail" style="color: var(--color-error)">{{ syncErrorMsg }}</span>
-      </div>
-
-      <div class="card">
-        <div class="row-between">
-          <div class="row-col">
-            <span class="row-label">{{ t('settings.autoSync') }}</span>
-            <span class="row-hint">{{ t('settings.autoSyncHint') }}</span>
-          </div>
-          <ToggleSwitch v-model="settings.autoSync" />
-        </div>
-      </div>
     </section>
 
     <!-- Actions -->
@@ -672,49 +615,6 @@ function onResetAll() {
   font-size: 10px;
   color: var(--color-text-secondary);
 }
-
-/* --- Sync --- */
-.sync-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  flex-shrink: 0;
-  background: var(--color-accent);
-  color: #fff;
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: 14px;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.sync-btn:active {
-  opacity: 0.8;
-}
-
-.sync-btn:disabled {
-  opacity: 0.5;
-}
-
-.sync-status {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.sync-status i {
-  font-size: 10px;
-}
-
-.sync-status-synced { color: #10B981; }
-.sync-status-syncing { color: var(--color-text-secondary); }
-.sync-status-pending { color: #F59E0B; }
-.sync-status-error { color: var(--color-error); }
-.sync-status-idle { color: var(--color-text-secondary); }
 
 /* --- Action Row --- */
 .action-row {

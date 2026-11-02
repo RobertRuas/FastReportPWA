@@ -46,6 +46,8 @@ export interface Project {
   createdAt: string
   updatedAt: string
   exportedAt: string | null
+  syncedAt: string | null
+  cols: number
   photos: Photo[]
 }
 
@@ -57,12 +59,10 @@ export interface PhotoBlob {
 }
 
 export interface AppSettings {
-  cols: 'auto' | number
   langPref: 'auto' | 'pt' | 'en'
   ui: number
   userName: string
   userEmail: string
-  autoSync: boolean
 }
 
 export interface UndoEntry {
