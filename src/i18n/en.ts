@@ -13,6 +13,11 @@ export default {
   'app.loading': 'Loading...',
   'app.confirm': 'Confirm',
 
+  // Patch notes
+  'patchNotes.title': 'What\'s new',
+  'patchNotes.subtitle': 'Update {version}',
+  'patchNotes.close': 'Close',
+
   // Home
   'home.title': 'FastReport PWA',
   'home.empty.title': 'Welcome to FastReport PWA',

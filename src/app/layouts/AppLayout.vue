@@ -6,6 +6,7 @@ import ConfirmDialog from 'primevue/confirmdialog'
 import AppHeader from '@/components/navigation/AppHeader.vue'
 import PageToolbar from '@/components/navigation/PageToolbar.vue'
 import ImportOverlay from '@/components/feedback/ImportOverlay.vue'
+import PatchNotesModal from '@/components/feedback/PatchNotesModal.vue'
 import { usePageActions } from '@/composables/usePageActions'
 import { usePageTitle } from '@/composables/usePageTitle'
 import { useProjects } from '@/composables/useProjects'
@@ -129,6 +130,7 @@ const headerActions = computed<PageAction[]>(() => {
       <i class="pi pi-spin pi-spinner app-loading-icon"></i>
     </div>
     <ImportOverlay />
+    <PatchNotesModal />
     <Toast position="top-center" />
     <ConfirmDialog />
   </div>
