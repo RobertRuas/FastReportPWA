@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, nextTick } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
 import { usePageTitle } from '@/composables/usePageTitle'
@@ -13,6 +13,8 @@ import { useI18n } from '@/composables/useI18n'
 import { getClassifiableSlots, hasGroups, getGroups, getSlotsForGroup, getSlot as getMapSlot } from '@/services/mapCatalog'
 import ProjectTabs from '@/components/common/ProjectTabs.vue'
 import type { Slot, Photo } from '@/models/types'
+
+const scrollCache = new Map<string, number>()
 
 const route = useRoute()
 const router = useRouter()
@@ -29,10 +31,29 @@ const { t } = useI18n()
 const projectId = computed(() => route.params.id as string)
 const activeFilter = ref<string>('all')
 
+function getScrollContainer(): HTMLElement | null {
+  return document.querySelector('.app-content') as HTMLElement | null
+}
+
 onMounted(async () => {
   await openProject(projectId.value)
   if (project.value) {
     setTitle(project.value.name)
+  }
+  await nextTick()
+  const el = getScrollContainer()
+  const saved = scrollCache.get(projectId.value)
+  if (el && saved) {
+    requestAnimationFrame(() => { el.scrollTop = saved })
+  }
+})
+
+onBeforeRouteLeave((to) => {
+  const el = getScrollContainer()
+  if (el && to.name === 'triage') {
+    scrollCache.set(projectId.value, el.scrollTop)
+  } else {
+    scrollCache.delete(projectId.value)
   }
 })
 

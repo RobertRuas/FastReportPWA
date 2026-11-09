@@ -1,6 +1,43 @@
+import * as tus from 'tus-js-client'
 import { supabase } from './supabase'
 import { exportProject, type ExportProgress } from './exportService'
 import type { Project } from '@/models/types'
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
+
+async function tusUpload(
+  blob: Blob,
+  bucketName: string,
+  objectName: string,
+  accessToken: string,
+  onProgress?: (p: ExportProgress) => void
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const upload = new tus.Upload(blob as unknown as File, {
+      endpoint: `${SUPABASE_URL}/storage/v1/upload/resumable`,
+      retryDelays: [0, 3000, 5000, 10000, 20000],
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        'x-upsert': 'true'
+      },
+      uploadDataDuringCreation: true,
+      removeFingerprintOnSuccess: true,
+      metadata: {
+        bucketName,
+        objectName,
+        contentType: 'application/zip',
+        cacheControl: '3600'
+      },
+      chunkSize: 6 * 1024 * 1024,
+      onError: (err) => reject(err),
+      onProgress: (uploaded, total) => {
+        onProgress?.({ current: uploaded, total })
+      },
+      onSuccess: () => resolve()
+    })
+    upload.start()
+  })
+}
 
 export interface RemoteBackup {
   id: string
@@ -16,22 +53,17 @@ export async function syncProject(
   userEmail: string,
   onProgress?: (p: ExportProgress) => void
 ): Promise<{ ok: boolean; error?: string }> {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { ok: false, error: 'Not authenticated' }
+  const { data: sessionData } = await supabase.auth.getSession()
+  const session = sessionData.session
+  if (!session?.user || !session.access_token) return { ok: false, error: 'Not authenticated' }
+  const user = session.user
 
   try {
     const blob = await exportProject(project, 'folders', onProgress)
 
     const filePath = `${userEmail}/${project.slug}.zip`
 
-    const { error: uploadError } = await supabase.storage
-      .from('fr-backups')
-      .upload(filePath, blob, {
-        contentType: 'application/zip',
-        upsert: true
-      })
-
-    if (uploadError) throw new Error(uploadError.message)
+    await tusUpload(blob, 'fr-backups', filePath, session.access_token, onProgress)
 
     const { error: dbError } = await supabase.from('fr_backups').upsert({
       id: project.id,
