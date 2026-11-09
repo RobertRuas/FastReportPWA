@@ -40,12 +40,26 @@ onMounted(async () => {
   if (project.value) {
     setTitle(project.value.name)
   }
+  const saved = scrollCache.get(projectId.value)
+  if (!saved) return
   await nextTick()
   const el = getScrollContainer()
-  const saved = scrollCache.get(projectId.value)
-  if (el && saved) {
-    requestAnimationFrame(() => { el.scrollTop = saved })
+  if (!el) return
+
+  // Wait until content has grown enough (thumbs render async),
+  // then restore. Give up after ~1s.
+  let attempts = 0
+  const maxAttempts = 60
+  const tryRestore = () => {
+    if (!el) return
+    if (el.scrollHeight >= saved + el.clientHeight || attempts >= maxAttempts) {
+      el.scrollTop = saved
+      return
+    }
+    attempts++
+    requestAnimationFrame(tryRestore)
   }
+  requestAnimationFrame(tryRestore)
 })
 
 onBeforeRouteLeave((to) => {

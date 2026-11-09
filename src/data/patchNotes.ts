@@ -9,6 +9,18 @@ export interface PatchNote {
 
 export const patchNotes: PatchNote[] = [
   {
+    version: '2026.11.09.2',
+    date: '2026-11-09',
+    items: {
+      pt: [
+        'Correção do scroll ao voltar do Image View — agora espera os thumbs carregarem antes de repor a posição.'
+      ],
+      en: [
+        'Fixed scroll restore when returning from the Image View — now waits for thumbs to render before scrolling back.'
+      ]
+    }
+  },
+  {
     version: '2026.11.09',
     date: '2026-11-09',
     items: {
