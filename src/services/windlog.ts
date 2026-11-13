@@ -144,43 +144,43 @@ export async function uploadFile(
   filename: string,
   onProgress?: (uploaded: number, total: number) => void
 ): Promise<WindlogResult<WindlogFileMeta>> {
-  const form = new FormData()
-  form.append('file', blob, filename)
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', `${BASE_URL}/v1/files/${collection}`)
+    xhr.setRequestHeader('X-API-Key', API_KEY)
+    xhr.timeout = 0 // sem timeout — a windlog pode ser lenta
 
-  // Progresso "otimista" baseado em tempo, enquanto o fetch está em curso.
-  // A API windlog não suporta chunked upload; fetch não expõe progresso de
-  // upload, mas é mais robusto que XHR em iOS Safari para uploads longos.
-  let ticker: ReturnType<typeof setInterval> | null = null
-  if (onProgress) {
-    const total = blob.size
-    let simulated = 0
-    const step = Math.max(total / 100, 1024)
-    onProgress(0, total)
-    ticker = setInterval(() => {
-      simulated = Math.min(simulated + step, total * 0.95)
-      onProgress(simulated, total)
-    }, 500)
-  }
-
-  try {
-    const res = await fetch(`${BASE_URL}/v1/files/${collection}`, {
-      method: 'POST',
-      headers: authHeader(),
-      body: form
-    })
-    if (ticker) { clearInterval(ticker); onProgress?.(blob.size, blob.size) }
-    const json = await res.json().catch(() => null)
-    if (!json) {
-      return { ok: false, error: { code: 'NETWORK', message: `HTTP ${res.status}` } }
+    if (onProgress) {
+      onProgress(0, blob.size)
+      xhr.upload.onprogress = (e) => {
+        const total = e.lengthComputable ? e.total : blob.size
+        onProgress(e.loaded, total)
+      }
+      xhr.upload.onload = () => onProgress(blob.size, blob.size)
     }
-    return json as WindlogResult<WindlogFileMeta>
-  } catch (err: any) {
-    if (ticker) clearInterval(ticker)
-    return {
+
+    xhr.onload = () => {
+      try {
+        const json = JSON.parse(xhr.responseText)
+        resolve(json as WindlogResult<WindlogFileMeta>)
+      } catch {
+        resolve({ ok: false, error: { code: 'NETWORK', message: `HTTP ${xhr.status}` } })
+      }
+    }
+    xhr.onerror = () => resolve({
       ok: false,
-      error: { code: 'NETWORK', message: err?.message ?? 'Upload failed' }
-    }
-  }
+      error: { code: 'NETWORK', message: `Falha de rede (HTTP ${xhr.status || 'sem resposta'})` }
+    })
+    xhr.ontimeout = () => resolve({
+      ok: false,
+      error: { code: 'TIMEOUT', message: 'Upload excedeu o tempo limite' }
+    })
+    xhr.onabort = () => resolve({ ok: false, error: { code: 'ABORTED', message: 'Upload cancelado' } })
+
+    const form = new FormData()
+    form.append('file', blob, filename)
+    xhr.send(form)
+  })
 }
 
 export async function downloadFile(

@@ -34,6 +34,11 @@ const syncing = ref(false)
 const syncProgress = ref(0)
 const syncTotal = ref(0)
 
+function formatMB(bytes: number): string {
+  if (!bytes) return '0 MB'
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB'
+}
+
 onMounted(async () => {
   await openProject(projectId.value)
   if (project.value) {
@@ -217,7 +222,8 @@ setActions([
         <div class="sync-progress-fill" :style="{ width: syncTotal > 0 ? (syncProgress / syncTotal * 100) + '%' : '0%' }"></div>
       </div>
       <span class="sync-progress-text">
-        {{ t('sync.syncing') }} {{ syncTotal > 0 ? `${syncProgress}/${syncTotal}` : '' }}
+        {{ t('sync.syncing') }}
+        <template v-if="syncTotal > 0">{{ formatMB(syncProgress) }} / {{ formatMB(syncTotal) }}</template>
       </span>
     </div>
 
