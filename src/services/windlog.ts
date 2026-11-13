@@ -144,32 +144,43 @@ export async function uploadFile(
   filename: string,
   onProgress?: (uploaded: number, total: number) => void
 ): Promise<WindlogResult<WindlogFileMeta>> {
-  return new Promise((resolve) => {
-    const xhr = new XMLHttpRequest()
-    xhr.open('POST', `${BASE_URL}/v1/files/${collection}`)
-    xhr.setRequestHeader('X-API-Key', API_KEY)
+  const form = new FormData()
+  form.append('file', blob, filename)
 
-    if (onProgress) {
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) onProgress(e.loaded, e.total)
-      }
+  // Progresso "otimista" baseado em tempo, enquanto o fetch está em curso.
+  // A API windlog não suporta chunked upload; fetch não expõe progresso de
+  // upload, mas é mais robusto que XHR em iOS Safari para uploads longos.
+  let ticker: ReturnType<typeof setInterval> | null = null
+  if (onProgress) {
+    const total = blob.size
+    let simulated = 0
+    const step = Math.max(total / 100, 1024)
+    onProgress(0, total)
+    ticker = setInterval(() => {
+      simulated = Math.min(simulated + step, total * 0.95)
+      onProgress(simulated, total)
+    }, 500)
+  }
+
+  try {
+    const res = await fetch(`${BASE_URL}/v1/files/${collection}`, {
+      method: 'POST',
+      headers: authHeader(),
+      body: form
+    })
+    if (ticker) { clearInterval(ticker); onProgress?.(blob.size, blob.size) }
+    const json = await res.json().catch(() => null)
+    if (!json) {
+      return { ok: false, error: { code: 'NETWORK', message: `HTTP ${res.status}` } }
     }
-
-    xhr.onload = () => {
-      try {
-        const json = JSON.parse(xhr.responseText)
-        resolve(json as WindlogResult<WindlogFileMeta>)
-      } catch {
-        resolve({ ok: false, error: { code: 'NETWORK', message: `HTTP ${xhr.status}` } })
-      }
+    return json as WindlogResult<WindlogFileMeta>
+  } catch (err: any) {
+    if (ticker) clearInterval(ticker)
+    return {
+      ok: false,
+      error: { code: 'NETWORK', message: err?.message ?? 'Upload failed' }
     }
-    xhr.onerror = () => resolve({ ok: false, error: { code: 'NETWORK', message: 'Upload failed' } })
-    xhr.onabort = () => resolve({ ok: false, error: { code: 'ABORTED', message: 'Upload aborted' } })
-
-    const form = new FormData()
-    form.append('file', blob, filename)
-    xhr.send(form)
-  })
+  }
 }
 
 export async function downloadFile(
