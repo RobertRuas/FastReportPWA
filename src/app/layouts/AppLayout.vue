@@ -13,6 +13,7 @@ import { useProjects } from '@/composables/useProjects'
 import { useSettings } from '@/composables/useSettings'
 import { useAuth } from '@/composables/useAuth'
 import { useI18n } from '@/composables/useI18n'
+import { useZipImport } from '@/composables/useZipImport'
 import { startSettingsSync, stopSettingsSync } from '@/services/settingsSync'
 import { checkAccess } from '@/services/accessService'
 import { listRemoteBackups } from '@/services/backupSync'
@@ -28,6 +29,7 @@ const { t } = useI18n()
 const { projects, ready, load: loadProjects } = useProjects()
 const { settings, load: loadSettings } = useSettings()
 const { authenticated, currentUser, logout } = useAuth()
+const { importing: zipImporting, pickAndImport } = useZipImport()
 
 const booted = ref(false)
 const showSyncBanner = ref(false)
@@ -85,6 +87,11 @@ function dismissBanner() {
 const headerActions = computed<PageAction[]>(() => {
   if (isHome.value) {
     return [
+      {
+        icon: zipImporting.value ? 'pi pi-spin pi-spinner' : 'pi pi-file-import',
+        label: t('home.empty.importZip'),
+        handler: () => pickAndImport()
+      },
       { icon: 'pi pi-plus', label: t('new.title'), handler: () => router.push('/projects/new') }
     ]
   }

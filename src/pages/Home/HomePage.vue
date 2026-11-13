@@ -11,7 +11,7 @@ import { projectSyncState } from '@/composables/useProjectSyncMap'
 import { syncProject as backupSyncProject, deleteBackup, listRemoteBackups, downloadBackup, type RemoteBackup } from '@/services/backupSync'
 import { importBackupZip } from '@/services/zipImportService'
 import { getAllMaps, getMap } from '@/services/mapCatalog'
-import { importZip } from '@/services/zipImportService'
+import { useZipImport } from '@/composables/useZipImport'
 import SwipeActions from '@/components/common/SwipeActions.vue'
 import type { SwipeAction } from '@/components/common/SwipeActions.vue'
 import * as db from '@/services/db'
@@ -22,7 +22,7 @@ const confirm = useConfirm()
 const { t, lang } = useI18n()
 const { currentUser } = useAuth()
 const { projects, projectStats, totalBytes, removeProject, markSynced } = useProjects()
-const importing = ref(false)
+const { importing, pickAndImport: onImportZip } = useZipImport()
 const syncingId = ref('')
 const remoteBackups = ref<RemoteBackup[]>([])
 const downloadingId = ref('')
@@ -201,31 +201,6 @@ function onDeleteProject(project: typeof projects.value[0]) {
   })
 }
 
-async function onImportZip() {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = '.zip,application/zip'
-
-  input.onchange = async () => {
-    const file = input.files?.[0]
-    if (!file) return
-    importing.value = true
-    try {
-      const result = await importZip(file)
-      toast.add({ severity: 'success', summary: t('zip.success'), life: 3000 })
-      router.push(`/projects/${result.projectId}`)
-    } catch (err: any) {
-      const msg = err?.message === 'noMetadata' ? t('zip.error.noMetadata')
-        : err?.message === 'mapNotFound' ? t('zip.error.mapNotFound', { mapId: '' })
-        : t('zip.error.generic')
-      toast.add({ severity: 'error', summary: msg, life: 4000 })
-    } finally {
-      importing.value = false
-    }
-  }
-
-  input.click()
-}
 </script>
 
 <template>
@@ -251,10 +226,6 @@ async function onImportZip() {
     <template v-if="sortedProjects.length > 0">
       <div class="list-header">
         <span class="list-header-title">{{ t('app.projects') }}</span>
-        <button class="list-header-action" :disabled="importing" @click="onImportZip" :aria-label="t('home.empty.importZip')">
-          <i :class="importing ? 'pi pi-spin pi-spinner' : 'pi pi-file-import'"></i>
-          <span>{{ t('home.empty.importZip') }}</span>
-        </button>
       </div>
 
       <div class="project-list">
