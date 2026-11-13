@@ -40,7 +40,7 @@ onMounted(async () => {
 async function loadRemoteBackups() {
   const backups = await listRemoteBackups()
   const localIds = new Set(projects.value.map(p => p.id))
-  remoteBackups.value = backups.filter(b => !localIds.has(b.id))
+  remoteBackups.value = backups.filter(b => !localIds.has(b.projectId))
 }
 
 async function onDownloadBackup(backup: RemoteBackup) {
@@ -52,7 +52,7 @@ async function onDownloadBackup(backup: RemoteBackup) {
       return
     }
     const imported = await importBackupZip(result.blob, {
-      id: backup.id,
+      id: backup.projectId,
       projectName: backup.projectName,
       projectSlug: backup.projectSlug,
       syncedAt: backup.syncedAt
@@ -251,6 +251,10 @@ async function onImportZip() {
     <template v-if="sortedProjects.length > 0">
       <div class="list-header">
         <span class="list-header-title">{{ t('app.projects') }}</span>
+        <button class="list-header-action" :disabled="importing" @click="onImportZip" :aria-label="t('home.empty.importZip')">
+          <i :class="importing ? 'pi pi-spin pi-spinner' : 'pi pi-file-import'"></i>
+          <span>{{ t('home.empty.importZip') }}</span>
+        </button>
       </div>
 
       <div class="project-list">
@@ -427,12 +431,42 @@ async function onImportZip() {
 .list-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
 }
 
 .list-header-title {
   font-size: var(--font-size-md);
   font-weight: 600;
   color: var(--color-text-primary);
+}
+
+.list-header-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.list-header-action:active {
+  background: var(--color-border);
+}
+
+.list-header-action:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.list-header-action i {
+  font-size: 12px;
 }
 
 /* --- Project List --- */
