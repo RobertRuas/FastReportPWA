@@ -6,7 +6,7 @@ import {
   removeDoc,
   uploadFile,
   downloadFile,
-  deleteFile,
+  deleteFileAndVerify,
   type WindlogDoc
 } from './windlog'
 import type { Project } from '@/models/types'
@@ -68,10 +68,10 @@ export async function syncProject(
       }
     }
 
-    // Remove backup anterior deste projeto (se houver)
+    // Remove backup anterior deste projeto (se houver) com verificação.
     const existing = await findIndexForProject(user.id, project.id)
     if (existing) {
-      await deleteFile(existing.data.fileId)
+      await deleteFileAndVerify(existing.data.fileId)
       await removeDoc('backup_index', existing.id)
     }
 
@@ -142,7 +142,7 @@ export async function deleteBackup(
   const entry = await findIndexForProject(user.id, projectId)
   if (!entry) return { ok: true }
 
-  const fileRes = await deleteFile(entry.data.fileId)
+  const fileRes = await deleteFileAndVerify(entry.data.fileId)
   if (!fileRes.ok && fileRes.error.code !== 'NOT_FOUND') {
     return { ok: false, error: fileRes.error.message }
   }

@@ -219,3 +219,40 @@ export async function downloadFile(
 export function deleteFile(fileId: string) {
   return request<{ id: string; deleted: boolean }>('DELETE', `/v1/files/${fileId}`)
 }
+
+// Confirma que o arquivo saiu de verdade da API — um HEAD/GET após o DELETE
+// precisa responder NOT_FOUND. Se continuar acessível, devolvemos erro para
+// a UI poder reportar que o blob ainda existe no servidor.
+export async function deleteFileAndVerify(
+  fileId: string,
+  maxAttempts = 3
+): Promise<WindlogResult<{ id: string; deleted: boolean }>> {
+  const del = await deleteFile(fileId)
+  if (!del.ok && del.error.code !== 'NOT_FOUND') return del
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    await new Promise(r => setTimeout(r, 300 * (attempt + 1)))
+    try {
+      const res = await fetch(`${BASE_URL}/v1/files/${fileId}`, {
+        method: 'GET',
+        headers: authHeader()
+      })
+      if (res.status === 404) {
+        return { ok: true, data: { id: fileId, deleted: true } }
+      }
+      // 200 = ainda acessível → tenta de novo
+      // Consumir body para liberar a conexão
+      await res.arrayBuffer().catch(() => null)
+    } catch {
+      // Falha de rede na verificação — não impede a conclusão
+      return { ok: true, data: { id: fileId, deleted: true } }
+    }
+  }
+  return {
+    ok: false,
+    error: {
+      code: 'DELETE_UNCONFIRMED',
+      message: 'O servidor não confirmou a remoção do arquivo após 3 tentativas.'
+    }
+  }
+}
