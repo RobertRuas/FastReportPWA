@@ -12,8 +12,8 @@ import { usePhotoStore } from '@/composables/usePhotoStore'
 import { useI18n } from '@/composables/useI18n'
 import { isProjectSynced, isProjectSyncStale } from '@/composables/useProjectSyncMap'
 import { exportProject, shareOrSave, type ExportLayout } from '@/services/exportService'
-import { syncProject as backupSyncProject, deleteBackup } from '@/services/backupSync'
 import { useAuth } from '@/composables/useAuth'
+import { useBackupSync, formatMB } from '@/composables/useBackupSync'
 import ProjectTabs from '@/components/common/ProjectTabs.vue'
 
 const route = useRoute()
@@ -25,19 +25,21 @@ const { setTitle } = usePageTitle()
 const { setActions } = usePageActions()
 const { importPhotos } = usePhotoImport()
 const { project, map, stats, openProject, closeProject } = useProjectSession()
-const { markExported, markSynced, removeProject, touchProject } = useProjects()
+const { markExported, removeProject, touchProject } = useProjects()
 const { revokeAllUrls } = usePhotoStore()
 
 const { currentUser } = useAuth()
 const projectId = computed(() => route.params.id as string)
-const syncing = ref(false)
-const syncProgress = ref(0)
-const syncTotal = ref(0)
-
-function formatMB(bytes: number): string {
-  if (!bytes) return '0 MB'
-  return (bytes / 1024 / 1024).toFixed(1) + ' MB'
-}
+const {
+  syncingId,
+  syncPhase,
+  syncProgress,
+  syncTotal,
+  syncPct,
+  sync: runSync,
+  removeRemote
+} = useBackupSync()
+const syncing = computed(() => !!project.value && syncingId.value === project.value.id)
 
 onMounted(async () => {
   await openProject(projectId.value)
@@ -124,20 +126,7 @@ async function onImport() {
 
 async function onSyncProject() {
   if (!project.value || syncing.value || !currentUser.value) return
-  syncing.value = true
-  syncProgress.value = 0
-  syncTotal.value = 0
-  const result = await backupSyncProject(project.value, currentUser.value.email, (p) => {
-    syncProgress.value = p.current
-    syncTotal.value = p.total
-  })
-  if (result.ok) {
-    markSynced(project.value)
-    toast.add({ severity: 'success', summary: t('sync.syncSuccess'), life: 2000 })
-  } else {
-    toast.add({ severity: 'error', summary: t('sync.syncError'), detail: result.error, life: 4000 })
-  }
-  syncing.value = false
+  await runSync(project.value, currentUser.value.email)
 }
 
 function onDeleteProject() {
@@ -159,7 +148,7 @@ function onDeleteProject() {
       closeProject()
       revokeAllUrls()
       if (p.syncedAt && currentUser.value) {
-        deleteBackup(p.id, currentUser.value.email, p.slug).catch(() => {})
+        await removeRemote(p, currentUser.value.email)
       }
       await removeProject(p.id)
       toast.add({ severity: 'info', summary: t('delete.success'), life: 2000 })
@@ -219,11 +208,11 @@ setActions([
 
     <div v-if="syncing" class="sync-progress">
       <div class="sync-progress-bar">
-        <div class="sync-progress-fill" :style="{ width: syncTotal > 0 ? (syncProgress / syncTotal * 100) + '%' : '0%' }"></div>
+        <div class="sync-progress-fill" :style="{ width: syncPct + '%' }"></div>
       </div>
       <span class="sync-progress-text">
-        {{ t('sync.syncing') }}
-        <template v-if="syncTotal > 0">{{ formatMB(syncProgress) }} / {{ formatMB(syncTotal) }}</template>
+        <template v-if="syncPhase === 'upload'">{{ formatMB(syncProgress) }} / {{ formatMB(syncTotal) }}</template>
+        <template v-else>{{ t('sync.syncing') }}</template>
       </span>
     </div>
 

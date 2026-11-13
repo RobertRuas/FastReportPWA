@@ -1,4 +1,4 @@
-import { exportProject, type ExportProgress } from './exportService'
+import { exportProject } from './exportService'
 import { checkAuth } from './authService'
 import {
   createDoc,
@@ -10,6 +10,12 @@ import {
   type WindlogDoc
 } from './windlog'
 import type { Project } from '@/models/types'
+
+export interface SyncProgress {
+  phase: 'export' | 'upload'
+  current: number
+  total: number
+}
 
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024 // 100 MB — limite da windlog
 
@@ -45,13 +51,15 @@ async function findIndexForProject(
 export async function syncProject(
   project: Project,
   userEmail: string,
-  onProgress?: (p: ExportProgress) => void
+  onProgress?: (p: SyncProgress) => void
 ): Promise<{ ok: boolean; error?: string }> {
   const user = await checkAuth()
   if (!user) return { ok: false, error: 'Not authenticated' }
 
   try {
-    const blob = await exportProject(project, 'folders', onProgress)
+    const blob = await exportProject(project, 'folders', (ep) => {
+      onProgress?.({ phase: 'export', current: ep.current, total: ep.total })
+    })
 
     if (blob.size > MAX_UPLOAD_BYTES) {
       return {
@@ -63,13 +71,15 @@ export async function syncProject(
     // Remove backup anterior deste projeto (se houver)
     const existing = await findIndexForProject(user.id, project.id)
     if (existing) {
-      deleteFile(existing.data.fileId).catch(() => {})
-      removeDoc('backup_index', existing.id).catch(() => {})
+      await deleteFile(existing.data.fileId)
+      await removeDoc('backup_index', existing.id)
     }
 
     const filename = `${project.slug || project.id}.zip`
+    // Estado inicial do upload (0 / size) para a UI mostrar algo imediatamente
+    onProgress?.({ phase: 'upload', current: 0, total: blob.size })
     const uploadRes = await uploadFile('backups', blob, filename, (uploaded, total) => {
-      onProgress?.({ current: uploaded, total })
+      onProgress?.({ phase: 'upload', current: uploaded, total })
     })
     if (!uploadRes.ok) return { ok: false, error: uploadRes.error.message }
 

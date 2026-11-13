@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
@@ -8,8 +8,8 @@ import { useProjects } from '@/composables/useProjects'
 import { useI18n } from '@/composables/useI18n'
 import { useAuth } from '@/composables/useAuth'
 import { usePageTitle } from '@/composables/usePageTitle'
+import { useBackupSync, formatMB } from '@/composables/useBackupSync'
 import { projectSyncState } from '@/composables/useProjectSyncMap'
-import { syncProject as backupSyncProject, deleteBackup } from '@/services/backupSync'
 import { getMap } from '@/services/mapCatalog'
 import SwipeActions from '@/components/common/SwipeActions.vue'
 import type { SwipeAction } from '@/components/common/SwipeActions.vue'
@@ -20,8 +20,17 @@ const toast = useToast()
 const confirm = useConfirm()
 const { t, lang } = useI18n()
 const { currentUser } = useAuth()
-const { projects, projectStats, removeProject, markSynced } = useProjects()
+const { projects, projectStats, removeProject } = useProjects()
 const { setTitle } = usePageTitle()
+const {
+  syncingId,
+  syncPhase,
+  syncProgress,
+  syncTotal,
+  syncPct,
+  sync: runSync,
+  removeRemote
+} = useBackupSync()
 
 const filter = computed(() => (route.query.filter as string) ?? 'all')
 
@@ -90,19 +99,9 @@ function getSwipeActions(project: typeof projects.value[0]): SwipeAction[] {
   ]
 }
 
-const syncingId = ref('')
-
 async function onSyncProject(project: typeof projects.value[0]) {
   if (!currentUser.value?.email) return
-  syncingId.value = project.id
-  const result = await backupSyncProject(project, currentUser.value.email)
-  syncingId.value = ''
-  if (result.ok) {
-    markSynced(project)
-    toast.add({ severity: 'success', summary: t('sync.syncSuccess'), life: 2000 })
-  } else {
-    toast.add({ severity: 'error', summary: t('sync.syncError'), detail: result.error, life: 4000 })
-  }
+  await runSync(project, currentUser.value.email)
 }
 
 function onDeleteProject(project: typeof projects.value[0]) {
@@ -120,7 +119,7 @@ function onDeleteProject(project: typeof projects.value[0]) {
     acceptClass: 'p-button-danger',
     accept: async () => {
       if (project.syncedAt && currentUser.value?.email) {
-        await deleteBackup(project.id, currentUser.value.email, project.slug)
+        await removeRemote(project, currentUser.value.email)
       }
       await removeProject(project.id)
       toast.add({ severity: 'info', summary: t('delete.success'), life: 2000 })
@@ -155,7 +154,16 @@ function onDeleteProject(project: typeof projects.value[0]) {
             <span class="project-meta">
               {{ mapName(project.mapId) }} · {{ formatDate(project.updatedAt) }}
             </span>
-            <div class="project-progress-row">
+            <div v-if="syncingId === project.id" class="sync-inline">
+              <div class="sync-inline-bar">
+                <div class="sync-inline-fill" :style="{ width: syncPct + '%' }"></div>
+              </div>
+              <span class="sync-inline-text">
+                <template v-if="syncPhase === 'upload'">{{ formatMB(syncProgress) }} / {{ formatMB(syncTotal) }}</template>
+                <template v-else>{{ t('sync.syncing') }}</template>
+              </span>
+            </div>
+            <div v-else class="project-progress-row">
               <ProgressBar
                 :value="projectProgress(project)"
                 :showValue="false"
@@ -314,6 +322,34 @@ function onDeleteProject(project: typeof projects.value[0]) {
 .project-sync-dot-pending {
   color: var(--color-text-secondary);
   opacity: 0.5;
+}
+
+.sync-inline {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.sync-inline-bar {
+  flex: 1;
+  height: 4px;
+  background: var(--color-border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.sync-inline-fill {
+  height: 100%;
+  background: var(--color-accent);
+  border-radius: 2px;
+  transition: width 0.2s ease;
+}
+
+.sync-inline-text {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .project-arrow {
