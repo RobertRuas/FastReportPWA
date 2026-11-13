@@ -1,31 +1,17 @@
 import { ref } from 'vue'
 import {
   checkAuth,
-  sendOtp as sendOtpService,
-  verifyOtp as verifyOtpService,
+  login as loginService,
   logout as logoutService,
-  updateProfile as updateProfileService,
-  onAuthStateChange
+  updateProfile as updateProfileService
 } from '@/services/authService'
 import type { AuthUser } from '@/services/authService'
 
 const authenticated = ref(false)
 const currentUser = ref<AuthUser | null>(null)
 const checked = ref(false)
-let listenerSetup = false
-
-function setupListener() {
-  if (listenerSetup) return
-  listenerSetup = true
-  onAuthStateChange((user) => {
-    currentUser.value = user
-    authenticated.value = user !== null
-  })
-}
 
 export function useAuth() {
-  setupListener()
-
   async function check(): Promise<boolean> {
     const user = await checkAuth()
     authenticated.value = user !== null
@@ -34,17 +20,13 @@ export function useAuth() {
     return authenticated.value
   }
 
-  async function sendOtp(email: string): Promise<{ error: string | null }> {
-    return sendOtpService(email)
-  }
-
-  async function verifyOtp(email: string, token: string): Promise<{ ok: boolean; error: string | null }> {
-    const result = await verifyOtpService(email, token)
+  async function login(email: string, password: string): Promise<{ ok: boolean; error: string | null; needsName?: boolean }> {
+    const result = await loginService(email, password)
     if (result.user) {
       authenticated.value = true
       currentUser.value = result.user
     }
-    return { ok: !result.error, error: result.error }
+    return { ok: !!result.user, error: result.error, needsName: result.needsName }
   }
 
   async function logout(): Promise<void> {
@@ -63,5 +45,5 @@ export function useAuth() {
     return result
   }
 
-  return { authenticated, currentUser, checked, check, sendOtp, verifyOtp, logout, updateProfile }
+  return { authenticated, currentUser, checked, check, login, logout, updateProfile }
 }

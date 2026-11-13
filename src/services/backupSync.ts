@@ -1,51 +1,45 @@
-import * as tus from 'tus-js-client'
-import { supabase } from './supabase'
 import { exportProject, type ExportProgress } from './exportService'
+import { checkAuth } from './authService'
+import {
+  createDoc,
+  listAllDocs,
+  removeDoc,
+  uploadFile,
+  downloadFile,
+  deleteFile,
+  type WindlogDoc
+} from './windlog'
 import type { Project } from '@/models/types'
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
+const MAX_UPLOAD_BYTES = 100 * 1024 * 1024 // 100 MB — limite da windlog
 
-async function tusUpload(
-  blob: Blob,
-  bucketName: string,
-  objectName: string,
-  accessToken: string,
-  onProgress?: (p: ExportProgress) => void
-): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const upload = new tus.Upload(blob as unknown as File, {
-      endpoint: `${SUPABASE_URL}/storage/v1/upload/resumable`,
-      retryDelays: [0, 3000, 5000, 10000, 20000],
-      headers: {
-        authorization: `Bearer ${accessToken}`,
-        'x-upsert': 'true'
-      },
-      uploadDataDuringCreation: true,
-      removeFingerprintOnSuccess: true,
-      metadata: {
-        bucketName,
-        objectName,
-        contentType: 'application/zip',
-        cacheControl: '3600'
-      },
-      chunkSize: 6 * 1024 * 1024,
-      onError: (err) => reject(err),
-      onProgress: (uploaded, total) => {
-        onProgress?.({ current: uploaded, total })
-      },
-      onSuccess: () => resolve()
-    })
-    upload.start()
-  })
+interface BackupIndexRecord {
+  userId: string
+  userEmail: string
+  projectId: string
+  projectName: string
+  projectSlug: string
+  fileId: string
+  fileSize: number
+  syncedAt: string
 }
 
 export interface RemoteBackup {
-  id: string
+  id: string          // id do doc em backup_index
+  projectId: string
   projectName: string
   projectSlug: string
-  filePath: string
+  fileId: string
   fileSize: number
   syncedAt: string
+}
+
+async function findIndexForProject(
+  userId: string,
+  projectId: string
+): Promise<WindlogDoc<BackupIndexRecord> | null> {
+  const docs = await listAllDocs<BackupIndexRecord>('backup_index')
+  return docs.find(d => d.data.userId === userId && d.data.projectId === projectId) ?? null
 }
 
 export async function syncProject(
@@ -53,30 +47,46 @@ export async function syncProject(
   userEmail: string,
   onProgress?: (p: ExportProgress) => void
 ): Promise<{ ok: boolean; error?: string }> {
-  const { data: sessionData } = await supabase.auth.getSession()
-  const session = sessionData.session
-  if (!session?.user || !session.access_token) return { ok: false, error: 'Not authenticated' }
-  const user = session.user
+  const user = await checkAuth()
+  if (!user) return { ok: false, error: 'Not authenticated' }
 
   try {
     const blob = await exportProject(project, 'folders', onProgress)
 
-    const filePath = `${userEmail}/${project.slug}.zip`
+    if (blob.size > MAX_UPLOAD_BYTES) {
+      return {
+        ok: false,
+        error: `O backup tem ${(blob.size / 1024 / 1024).toFixed(1)} MB — acima do limite de 100 MB da API.`
+      }
+    }
 
-    await tusUpload(blob, 'fr-backups', filePath, session.access_token, onProgress)
+    // Remove backup anterior deste projeto (se houver)
+    const existing = await findIndexForProject(user.id, project.id)
+    if (existing) {
+      deleteFile(existing.data.fileId).catch(() => {})
+      removeDoc('backup_index', existing.id).catch(() => {})
+    }
 
-    const { error: dbError } = await supabase.from('fr_backups').upsert({
-      id: project.id,
-      user_id: user.id,
-      user_email: userEmail,
-      project_name: project.name,
-      project_slug: project.slug,
-      file_path: filePath,
-      file_size: blob.size,
-      synced_at: new Date().toISOString()
+    const filename = `${project.slug || project.id}.zip`
+    const uploadRes = await uploadFile('backups', blob, filename, (uploaded, total) => {
+      onProgress?.({ current: uploaded, total })
     })
+    if (!uploadRes.ok) return { ok: false, error: uploadRes.error.message }
 
-    if (dbError) throw new Error(dbError.message)
+    const indexRes = await createDoc<BackupIndexRecord>('backup_index', {
+      userId: user.id,
+      userEmail,
+      projectId: project.id,
+      projectName: project.name,
+      projectSlug: project.slug,
+      fileId: uploadRes.data.id,
+      fileSize: blob.size,
+      syncedAt: new Date().toISOString()
+    })
+    if (!indexRes.ok) {
+      deleteFile(uploadRes.data.id).catch(() => {})
+      return { ok: false, error: indexRes.error.message }
+    }
 
     return { ok: true }
   } catch (err: any) {
@@ -85,75 +95,48 @@ export async function syncProject(
 }
 
 export async function listRemoteBackups(): Promise<RemoteBackup[]> {
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await checkAuth()
   if (!user) return []
 
-  const { data, error } = await supabase
-    .from('fr_backups')
-    .select('*')
-    .eq('user_id', user.id)
-    .order('synced_at', { ascending: false })
-
-  if (error || !data) return []
-
-  return data.map((row: any) => ({
-    id: row.id,
-    projectName: row.project_name,
-    projectSlug: row.project_slug,
-    filePath: row.file_path,
-    fileSize: row.file_size,
-    syncedAt: row.synced_at
-  }))
+  const docs = await listAllDocs<BackupIndexRecord>('backup_index')
+  return docs
+    .filter(d => d.data.userId === user.id)
+    .map(d => ({
+      id: d.id,
+      projectId: d.data.projectId,
+      projectName: d.data.projectName,
+      projectSlug: d.data.projectSlug,
+      fileId: d.data.fileId,
+      fileSize: d.data.fileSize,
+      syncedAt: d.data.syncedAt
+    }))
+    .sort((a, b) => b.syncedAt.localeCompare(a.syncedAt))
 }
 
 export async function downloadBackup(
   backup: RemoteBackup
 ): Promise<{ ok: boolean; blob?: Blob; error?: string }> {
-  try {
-    const { data, error } = await supabase.storage
-      .from('fr-backups')
-      .download(backup.filePath)
-
-    if (error || !data) throw new Error(error?.message ?? 'Download failed')
-
-    return { ok: true, blob: data }
-  } catch (err: any) {
-    return { ok: false, error: err?.message ?? 'Download failed' }
-  }
+  const res = await downloadFile(backup.fileId)
+  if (!res.ok) return { ok: false, error: res.error.message }
+  return { ok: true, blob: res.data }
 }
 
 export async function deleteBackup(
   projectId: string,
-  userEmail: string,
-  projectSlug: string
+  _userEmail: string,
+  _projectSlug: string
 ): Promise<{ ok: boolean; error?: string }> {
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await checkAuth()
   if (!user) return { ok: false, error: 'Not authenticated' }
 
-  try {
-    const filePath = `${userEmail}/${projectSlug}.zip`
-    await supabase.storage.from('fr-backups').remove([filePath])
-    await supabase.from('fr_backups').delete().eq('id', projectId).eq('user_id', user.id)
-    return { ok: true }
-  } catch (err: any) {
-    return { ok: false, error: err?.message ?? 'Delete failed' }
+  const entry = await findIndexForProject(user.id, projectId)
+  if (!entry) return { ok: true }
+
+  const fileRes = await deleteFile(entry.data.fileId)
+  if (!fileRes.ok && fileRes.error.code !== 'NOT_FOUND') {
+    return { ok: false, error: fileRes.error.message }
   }
-}
-
-export async function getShareUrl(
-  userEmail: string,
-  projectSlug: string
-): Promise<{ ok: boolean; url?: string; error?: string }> {
-  try {
-    const filePath = `${userEmail}/${projectSlug}.zip`
-    const { data, error } = await supabase.storage
-      .from('fr-backups')
-      .createSignedUrl(filePath, 3600)
-
-    if (error || !data?.signedUrl) throw new Error(error?.message ?? 'Failed to create link')
-
-    return { ok: true, url: data.signedUrl }
-  } catch (err: any) {
-    return { ok: false, error: err?.message ?? 'Failed to create link' }
-  }
+  const idxRes = await removeDoc('backup_index', entry.id)
+  if (!idxRes.ok) return { ok: false, error: idxRes.error.message }
+  return { ok: true }
 }

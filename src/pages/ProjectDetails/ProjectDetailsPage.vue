@@ -12,7 +12,7 @@ import { usePhotoStore } from '@/composables/usePhotoStore'
 import { useI18n } from '@/composables/useI18n'
 import { isProjectSynced, isProjectSyncStale } from '@/composables/useProjectSyncMap'
 import { exportProject, shareOrSave, type ExportLayout } from '@/services/exportService'
-import { syncProject as backupSyncProject, getShareUrl, deleteBackup } from '@/services/backupSync'
+import { syncProject as backupSyncProject, deleteBackup } from '@/services/backupSync'
 import { useAuth } from '@/composables/useAuth'
 import ProjectTabs from '@/components/common/ProjectTabs.vue'
 
@@ -33,7 +33,6 @@ const projectId = computed(() => route.params.id as string)
 const syncing = ref(false)
 const syncProgress = ref(0)
 const syncTotal = ref(0)
-const emailExporting = ref(false)
 
 onMounted(async () => {
   await openProject(projectId.value)
@@ -97,51 +96,6 @@ async function doExport(layout: ExportLayout) {
     toast.add({ severity: 'error', summary: t('export.error', { message: msg }), life: 5000 })
   } finally {
     exporting.value = false
-  }
-}
-
-async function doExportShare() {
-  if (!project.value || emailExporting.value || !currentUser.value) return
-
-  if (!project.value.syncedAt) {
-    toast.add({ severity: 'warn', summary: t('sync.syncFirst'), life: 3000 })
-    showExportModal.value = false
-    return
-  }
-
-  emailExporting.value = true
-  try {
-    const result = await getShareUrl(currentUser.value.email, project.value.slug)
-    if (!result.ok || !result.url) {
-      toast.add({ severity: 'error', summary: t('export.shareError'), detail: result.error, life: 5000 })
-      return
-    }
-
-    const base = window.location.origin + window.location.pathname
-    const params = new URLSearchParams({ url: result.url, name: project.value.name })
-    const downloadPageUrl = `${base}#/download?${params.toString()}`
-
-    if (navigator.share) {
-      await navigator.share({
-        title: `FastReport: ${project.value.name}`,
-        text: `Download do projeto "${project.value.name}" — link válido por 1 hora.`,
-        url: downloadPageUrl
-      })
-    } else {
-      await navigator.clipboard.writeText(downloadPageUrl)
-    }
-
-    showExportModal.value = false
-    toast.add({ severity: 'success', summary: t('export.shareSuccess'), life: 4000 })
-  } catch (err: any) {
-    if (err?.name === 'AbortError') {
-      showExportModal.value = false
-      return
-    }
-    console.error('[FastReport] Share export failed:', err)
-    toast.add({ severity: 'error', summary: t('export.shareError'), life: 5000 })
-  } finally {
-    emailExporting.value = false
   }
 }
 
@@ -349,17 +303,6 @@ setActions([
                 <div class="export-option-text">
                   <span class="export-option-label">{{ t('export.flatOnly') }}</span>
                   <span class="export-option-hint">{{ t('export.flatOnlyHint') }}</span>
-                </div>
-                <i class="pi pi-chevron-right export-option-arrow"></i>
-              </button>
-
-              <button class="export-option" @click="doExportShare">
-                <span class="export-option-icon export-option-icon-share">
-                  <i class="pi pi-share-alt"></i>
-                </span>
-                <div class="export-option-text">
-                  <span class="export-option-label">{{ t('export.shareLink') }}</span>
-                  <span class="export-option-hint">{{ t('export.shareLinkHint') }}</span>
                 </div>
                 <i class="pi pi-chevron-right export-option-arrow"></i>
               </button>

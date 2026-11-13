@@ -13,7 +13,7 @@ Before writing code, making changes, or taking any decision:
    - Data model change → [src/models/types.ts](src/models/types.ts); update both `pt.ts` and `en.ts` if user-facing strings change.
    - Routing / page skeleton → [src/app/router/index.ts](src/app/router/index.ts) and [src/app/layouts/AppLayout.vue](src/app/layouts/AppLayout.vue).
    - Organization maps → JSON files under [src/data/](src/data/) + [mapCatalog.ts](src/services/mapCatalog.ts).
-   - Supabase / backend → [supabase/](supabase/), [sql/](sql/).
+   - Remote API (windlog) → [src/services/windlog.ts](src/services/windlog.ts) is the only place with HTTP calls; business services (auth/access/settings/backup) sit on top.
 3. **Never read all files.** Only read what you will change or what you need to understand a dependency.
 
 ## Project conventions (recap)
@@ -27,7 +27,7 @@ Before writing code, making changes, or taking any decision:
 
 ## After structural changes
 
-When you create, move, rename, or delete any file or directory (routes, pages, services, composables, components, SQL files, Edge Functions, etc.), update [AI_PROJECT_MAP.md](AI_PROJECT_MAP.md) to reflect the change before finishing the task.
+When you create, move, rename, or delete any file or directory (routes, pages, services, composables, components, etc.), update [AI_PROJECT_MAP.md](AI_PROJECT_MAP.md) to reflect the change before finishing the task.
 
 Also update the map when a service or composable's public API changes meaningfully — the one-line descriptions in the map must stay accurate.
 
@@ -35,11 +35,11 @@ Also update the map when a service or composable's public API changes meaningful
 
 - UI change → `npm run dev` and open the page on a real mobile viewport (the PWA is mobile-first). Chrome DevTools device mode is fine for layout but doesn't cover touch gestures (SwipeActions, triage) — test those on a phone when you can.
 - Type-check/build before declaring a task done: `npm run build` (runs `vue-tsc --noEmit` then Vite build).
-- Supabase-related changes: verify the matching migration/SQL is applied; the Edge Functions and the client code must agree on the function/table name.
+- Remote state (users / access / settings / backup_index) lives in windlog collections — no migrations to run, but changes to document shapes must be reflected in [windlog.ts](src/services/windlog.ts) consumers.
 
 ## Deploying
 
-Deploy is automatic on push to `main` via [.github/workflows/deploy.yml](.github/workflows/deploy.yml) — GitHub Actions runs `npm ci && npm run build` with the two repo secrets (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`) and publishes `dist/` to GitHub Pages at https://robertruas.github.io/FastReportPWA/.
+Deploy is automatic on push to `main` via [.github/workflows/deploy.yml](.github/workflows/deploy.yml) — GitHub Actions runs `npm ci && npm run build` with the two repo secrets (`VITE_WINDLOG_URL`, `VITE_WINDLOG_KEY`) and publishes `dist/` to GitHub Pages at https://robertruas.github.io/FastReportPWA/.
 
 When the user asks to "deploy", "ship", "publish", or "release":
 
@@ -64,17 +64,6 @@ When the user asks to "deploy", "ship", "publish", or "release":
 
 There is no tag-based release flow — every merge to `main` is a release.
 
-## Supabase Edge Functions
+## windlog API
 
-If a change touches [supabase/functions/](supabase/functions/), it is not deployed by the GitHub Actions workflow — deploy it explicitly with the Supabase CLI:
-
-```bash
-supabase functions deploy send-export-link
-supabase functions deploy notify-expiring-projects
-```
-
-Check that the required secrets (`RESEND_API_KEY`, `FROM_EMAIL`, `SUPABASE_SERVICE_ROLE_KEY`) are set in the Supabase project before invoking them.
-
-## Database migrations
-
-SQL under [supabase/migrations/](supabase/migrations/) must be applied in order. If you add a migration, give it a date-prefixed filename matching the existing pattern (`YYYYMMDD_<slug>.sql`) and mention in the PR / commit message whether it has been applied to the live project yet.
+The app's only backend is [api.windlog.org](https://api.windlog.org/docs) — a generic JSON + file store accessed through [src/services/windlog.ts](src/services/windlog.ts). Collections in use: `users`, `access`, `settings`, `backup_index`, plus the files bucket `backups/`. There are no migrations, no server-side code and no scheduled jobs.

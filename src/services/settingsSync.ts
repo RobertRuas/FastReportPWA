@@ -1,78 +1,110 @@
 import { watch, type Reactive } from 'vue'
-import { supabase } from './supabase'
 import type { AppSettings } from '@/models/types'
-import type { RealtimeChannel } from '@supabase/supabase-js'
+import { getDoc, putDoc, listAllDocs, type WindlogDoc } from './windlog'
+import { checkAuth } from './authService'
 
-let channel: RealtimeChannel | null = null
+interface SettingsRecord {
+  userId: string
+  langPref: AppSettings['langPref']
+  ui: number
+  updatedAt: string
+}
+
+const POLL_INTERVAL_MS = 30_000
+const DEBOUNCE_MS = 1000
+
+let pollTimer: ReturnType<typeof setInterval> | null = null
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let remoteUpdate = false
 let stopWatch: (() => void) | null = null
 let currentUserId: string | null = null
+let currentDocId: string | null = null
+let lastRemoteUpdatedAt: string | null = null
+
+async function findDocForUser(userId: string): Promise<WindlogDoc<SettingsRecord> | null> {
+  const docs = await listAllDocs<SettingsRecord>('settings')
+  return docs.find(d => d.data.userId === userId) ?? null
+}
+
+function applyRemote(settings: Reactive<AppSettings>, data: SettingsRecord) {
+  remoteUpdate = true
+  settings.langPref = data.langPref
+  settings.ui = data.ui
+  remoteUpdate = false
+  lastRemoteUpdatedAt = data.updatedAt
+}
+
+async function upsert(settings: AppSettings) {
+  if (!currentUserId) return
+  const now = new Date().toISOString()
+  const payload: SettingsRecord = {
+    userId: currentUserId,
+    langPref: settings.langPref,
+    ui: settings.ui,
+    updatedAt: now
+  }
+  if (currentDocId) {
+    const res = await putDoc<SettingsRecord>('settings', currentDocId, payload)
+    if (res.ok) lastRemoteUpdatedAt = payload.updatedAt
+  } else {
+    // precisa de doc id — recria via list+put? Melhor: tentar listar primeiro
+    const found = await findDocForUser(currentUserId)
+    if (found) {
+      currentDocId = found.id
+      const res = await putDoc<SettingsRecord>('settings', found.id, payload)
+      if (res.ok) lastRemoteUpdatedAt = payload.updatedAt
+    } else {
+      // Fallback: cria novo
+      const { createDoc } = await import('./windlog')
+      const res = await createDoc<SettingsRecord>('settings', payload)
+      if (res.ok) {
+        currentDocId = res.data.id
+        lastRemoteUpdatedAt = payload.updatedAt
+      }
+    }
+  }
+}
+
+async function pollRemote(settings: Reactive<AppSettings>) {
+  if (!currentDocId) return
+  const res = await getDoc<SettingsRecord>('settings', currentDocId)
+  if (!res.ok) return
+  if (res.data.data.updatedAt !== lastRemoteUpdatedAt) {
+    applyRemote(settings, res.data.data)
+  }
+}
 
 export async function startSettingsSync(settings: Reactive<AppSettings>) {
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await checkAuth()
   if (!user) return
   currentUserId = user.id
 
-  const { data, error } = await supabase
-    .from('fr_settings')
-    .select('lang_pref, ui, updated_at')
-    .eq('user_id', user.id)
-    .maybeSingle()
-
-  if (error) return
-
-  if (data) {
-    remoteUpdate = true
-    settings.langPref = data.lang_pref as AppSettings['langPref']
-    settings.ui = data.ui
-    remoteUpdate = false
+  const existing = await findDocForUser(user.id)
+  if (existing) {
+    currentDocId = existing.id
+    applyRemote(settings, existing.data)
   } else {
-    await upsertSettings(user.id, settings)
+    await upsert(settings)
   }
-
-  channel = supabase
-    .channel('fr-settings-sync')
-    .on('postgres_changes', {
-      event: '*',
-      schema: 'public',
-      table: 'fr_settings',
-      filter: `user_id=eq.${user.id}`
-    }, (payload) => {
-      const row = payload.new as Record<string, unknown>
-      if (!row) return
-      remoteUpdate = true
-      settings.langPref = (row.lang_pref as string) as AppSettings['langPref']
-      settings.ui = row.ui as number
-      remoteUpdate = false
-    })
-    .subscribe()
 
   stopWatch = watch(
     () => ({ langPref: settings.langPref, ui: settings.ui }),
     () => {
       if (remoteUpdate) return
       if (debounceTimer) clearTimeout(debounceTimer)
-      debounceTimer = setTimeout(() => {
-        if (currentUserId) upsertSettings(currentUserId, settings)
-      }, 1000)
+      debounceTimer = setTimeout(() => upsert(settings), DEBOUNCE_MS)
     },
     { deep: true }
   )
-}
 
-async function upsertSettings(userId: string, settings: AppSettings) {
-  await supabase.from('fr_settings').upsert({
-    user_id: userId,
-    lang_pref: settings.langPref,
-    ui: settings.ui,
-    updated_at: new Date().toISOString()
-  })
+  pollTimer = setInterval(() => pollRemote(settings), POLL_INTERVAL_MS)
 }
 
 export function stopSettingsSync() {
-  if (channel) { supabase.removeChannel(channel); channel = null }
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
   if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null }
   if (stopWatch) { stopWatch(); stopWatch = null }
   currentUserId = null
+  currentDocId = null
+  lastRemoteUpdatedAt = null
 }

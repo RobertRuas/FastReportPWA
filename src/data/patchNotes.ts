@@ -9,6 +9,26 @@ export interface PatchNote {
 
 export const patchNotes: PatchNote[] = [
   {
+    version: '2026.11.13',
+    date: '2026-11-13',
+    items: {
+      pt: [
+        'Migração completa do backend para a API windlog — Supabase removido.',
+        'Novo login com e-mail + senha (a senha é definida no primeiro acesso).',
+        'Sincronização de definições agora por polling (30s) em vez de realtime.',
+        'Link de partilha por e-mail removido — use o ficheiro ZIP exportado localmente.',
+        'Limite de 100 MB por backup sincronizado para a cloud.'
+      ],
+      en: [
+        'Complete backend migration to the windlog API — Supabase removed.',
+        'New login with email + password (password is set on first access).',
+        'Settings sync now via polling (30s) instead of realtime.',
+        'Share by email link removed — share the locally exported ZIP instead.',
+        '100 MB limit per cloud-synced backup.'
+      ]
+    }
+  },
+  {
     version: '2026.11.09.2',
     date: '2026-11-09',
     items: {

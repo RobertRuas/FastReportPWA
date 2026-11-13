@@ -4,11 +4,11 @@
 
 ## Project Overview
 
-- **What**: Mobile-first PWA for capture, triage, review and export of photographic inspection reports. Works offline — data lives in IndexedDB on the device; Supabase is used only for auth, settings sync, remote backups and short-lived download links.
-- **Stack**: Vue 3 + TypeScript, PrimeVue 4 (Aura preset), Vue Router (hash history), IndexedDB, Supabase (auth + Postgres + Storage + Edge Functions), Vite 6, `vite-plugin-pwa` (Workbox autoUpdate).
+- **What**: Mobile-first PWA for capture, triage, review and export of photographic inspection reports. Works offline — data lives in IndexedDB on the device; the windlog API (https://api.windlog.org) is used only for auth, access control, settings sync and remote backups.
+- **Stack**: Vue 3 + TypeScript, PrimeVue 4 (Aura preset), Vue Router (hash history), IndexedDB, windlog API (generic JSON + file store), Vite 6, `vite-plugin-pwa` (Workbox autoUpdate).
 - **Target**: Mobile browsers (installable as PWA). Deployed as a static site to GitHub Pages at https://robertruas.github.io/FastReportPWA/.
 - **Languages**: Portuguese + English, auto-detected from `navigator.language`.
-- **Access model**: Auth via Supabase email OTP; access gate backed by the `fr_access` table (admin = 92ruas@gmail.com, hard-coded in [accessService.ts](src/services/accessService.ts)).
+- **Access model**: Auth via email + password (hashed client-side with PBKDF2/WebCrypto) stored in the windlog `users` collection; access gate via the `access` collection (admin = 92ruas@gmail.com, hard-coded in [accessService.ts](src/services/accessService.ts)).
 
 ---
 
@@ -18,8 +18,8 @@
 FastReportPWA/
 ├── package.json              npm manifest. Scripts: dev (vite --host), build (vue-tsc --noEmit + vite build),
 │                             preview (vite preview --host). Deps: vue 3.5, vue-router 4.5, primevue 4.3,
-│                             @primeuix/themes, primeicons, @supabase/supabase-js 2.118, jszip 3.10.
-│                             Dev deps: @vitejs/plugin-vue, vite 6.1, vite-plugin-pwa 2, vue-tsc, typescript 5.7.
+│                             @primeuix/themes, primeicons, jszip 3.10. Dev deps: @vitejs/plugin-vue,
+│                             vite 6.1, vite-plugin-pwa 2, vue-tsc, typescript 5.7.
 ├── package-lock.json         Pinned dependency tree.
 ├── index.html                Vite entry. Mobile meta tags (viewport-fit=cover, apple-mobile-web-app-capable,
 │                             theme-color #2563EB), manifest + icons. Contains an inline splash screen
@@ -31,10 +31,9 @@ FastReportPWA/
 ├── tsconfig.json             References tsconfig.app.json + tsconfig.node.json.
 ├── tsconfig.app.json         TypeScript config for the app source (Vue 3 + DOM).
 ├── tsconfig.node.json        TypeScript config for the Vite config / Node tooling.
-├── env.d.ts                  Ambient types: `import.meta.env` for VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY,
-│                             VITE_EMAILJS_* (legacy).
-├── .env.example              Template env file (never commit the real .env). Lists VITE_SUPABASE_URL,
-│                             VITE_SUPABASE_ANON_KEY, VITE_EMAILJS_* (legacy, optional).
+├── env.d.ts                  Ambient types: `import.meta.env` for VITE_WINDLOG_URL, VITE_WINDLOG_KEY.
+├── .env.example              Template env file (never commit the real .env). Lists VITE_WINDLOG_URL and
+│                             VITE_WINDLOG_KEY.
 ├── .gitignore                Ignores node_modules, dist, .DS_Store, *.local, .env (except .env.example), .vite.
 ├── README.md                 User-facing readme (features, setup, deploy, project layout).
 ├── PLANO.md                  Planning doc — product roadmap and high-level decisions.
@@ -47,8 +46,8 @@ FastReportPWA/
 ```
 .github/workflows/
 └── deploy.yml                GitHub Actions workflow. On push to main (or workflow_dispatch): checks out, sets up
-                              Node 20 (npm cache), runs `npm ci` + `npm run build` with VITE_SUPABASE_URL and
-                              VITE_SUPABASE_ANON_KEY injected from repo secrets, uploads `dist` via
+                              Node 20 (npm cache), runs `npm ci` + `npm run build` with VITE_WINDLOG_URL and
+                              VITE_WINDLOG_KEY injected from repo secrets, uploads `dist` via
                               actions/upload-pages-artifact@v3, then deploys to GitHub Pages
                               (actions/deploy-pages@v4). concurrency group "pages" with cancel-in-progress.
 ```
@@ -87,31 +86,17 @@ arquitetura/
 └── na.jpg                    Placeholder image referenced from these docs.
 ```
 
-## Database & backend
+## Backend
 
-```
-sql/
-├── schema.sql                Base Postgres schema (fr_settings, fr_access, fr_backups, fr_temp_exports).
-├── cleanup_and_new_schema.sql  Migration script that drops legacy objects and recreates the schema cleanly.
-└── fix_create_fr_backups.sql   Fix-up for the fr_backups table.
+The app talks to **https://api.windlog.org** (windlog) — a generic JSON-document + file store. Collections used:
 
-supabase/
-├── migrations/
-│   ├── 20261101_temp_exports.sql           Table + RLS for fr_temp_exports (short-lived download links).
-│   ├── 20261101_auto_cleanup.sql           Scheduled cleanup job for expired temp exports and old backups.
-│   └── 20261101_send_email_function.sql    SQL side of the email-sending RPC (fr_projects_pending_notification
-│                                            etc.).
-└── functions/
-    ├── send-export-link/index.ts            Deno Edge Function (POST). Reads { downloadUrl, email, projectName }
-    │                                         from the body and calls Resend (RESEND_API_KEY, FROM_EMAIL env) to
-    │                                         send the export email with the signed download link. Used from the
-    │                                         app whenever a user exports a project and chooses "send by email".
-    └── notify-expiring-projects/index.ts    Deno Edge Function invoked on a schedule. Runs the
-                                              fr_projects_pending_notification RPC, zips each pending project's
-                                              photos from Storage (bucket fr-photos, path <user_id>/<project_id>)
-                                              via jszip, uploads the zip to a short-lived download URL, and emails
-                                              the owner through Resend before the project expires.
-```
+- `users` — `{ email, name, salt, passHash, createdAt, lastLoginAt }`. Password hashed client-side (PBKDF2-SHA-256, 100k iterations). Lookup by email is a client-side scan over the full collection (small scale).
+- `access` — `{ email, status: 'active'|'revoked', lastAccessAt, deviceInfo, createdAt }`.
+- `settings` — one document per user: `{ userId, langPref, ui, updatedAt }`. Polling every 30s (no realtime).
+- `backup_index` — one document per synced project: `{ userId, userEmail, projectId, projectName, projectSlug, fileId, fileSize, syncedAt }`.
+- Files collection `backups/` — the ZIP binaries uploaded through `POST /v1/files/backups`. 100 MB per-file limit enforced in the client.
+
+No server-side code lives in the repo. There are no SQL migrations, no edge functions, no scheduled jobs, no emails, no public share links.
 
 ---
 
@@ -177,13 +162,21 @@ src/
 
 ```
 services/
-├── supabase.ts              Creates the shared supabase client from VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY.
-├── authService.ts           Thin wrapper over supabase.auth. checkAuth (returns current AuthUser or null),
-│                            sendOtp(email), verifyOtp(email, token), logout, updateProfile(name),
-│                            onAuthStateChange(cb). AuthUser = { id, email, name }.
-├── accessService.ts         Reads/writes fr_access rows. ADMIN_EMAIL constant = '92ruas@gmail.com'
+├── windlog.ts               Typed HTTP client for the windlog API (api.windlog.org). Reads VITE_WINDLOG_URL +
+│                            VITE_WINDLOG_KEY. Exports: createDoc, getDoc, listDocs, listAllDocs (paginates to
+│                            exhaust), patchDoc, putDoc, removeDoc, uploadFile (multipart with progress via XHR),
+│                            downloadFile (streaming with progress), deleteFile. 429 retries with Retry-After.
+│                            All responses normalized to { ok, data } | { ok, error }.
+├── authService.ts           Auth over the windlog `users` collection. login(email, password): authorizes against
+│                            accessService.checkAccess, then either verifies the PBKDF2 hash of an existing user
+│                            or creates a new one on first access. Password hashed with WebCrypto PBKDF2-SHA-256
+│                            (100k iterations, per-user random salt). Session persisted in localStorage key
+│                            fr_session_v2 as { id, email, name } — no JWT, no server-side session.
+│                            checkAuth reads session, logout clears it, updateProfile(name) PATCHes the user doc.
+├── accessService.ts         Reads/writes the `access` collection on windlog. ADMIN_EMAIL = '92ruas@gmail.com'
 │                            (isAdmin helper). checkAccess(email) returns 'allowed' | 'revoked' | 'denied',
-│                            consumed by the router guard / AppLayout boot. Backs the AccessControlPage admin UI.
+│                            consumed by authService.login and the router guard / AppLayout boot. Backs the
+│                            AccessControlPage admin UI.
 ├── db.ts                    IndexedDB wrapper. DB_NAME 'fastreport', DB_VERSION 1, stores 'projects',
 │                            'blobs', 'settings'. Exposes boot(), getAllProjects, saveProject (markSaving/
 │                            markSaved via useSaveStatus — debounced), deleteProject, getAllBlobsForProject,
@@ -214,14 +207,17 @@ services/
 ├── zipImportService.ts      importZip(file, onProgress) — reads fastreport.json (or .fastreport.json), resolves
 │                            the map via mapCatalog, reprocesses every image through imageProcessor +
 │                            generateThumb, creates a Project via useProjects, attaches photos via usePhotoStore.
-├── backupSync.ts            Remote backup to Supabase Storage. syncProject(project, userEmail, onProgress) —
-│                            runs exportProject to get a ZIP, uploads it under <user_id>/<slug>.zip, writes an
-│                            fr_backups row. listRemoteBackups(), restoreBackup(path), deleteRemoteBackup(path).
-│                            The AppLayout new-device sync banner uses listRemoteBackups.
-├── settingsSync.ts          Realtime sync of fr_settings between devices. startSettingsSync(settings) opens a
-│                            RealtimeChannel, pulls lang_pref + ui from Supabase, watches the reactive settings
-│                            object (debounced writes guarded by a remoteUpdate flag to avoid echo loops).
-│                            stopSettingsSync tears it down (AppLayout onUnmounted).
+├── backupSync.ts            Remote backup to windlog. syncProject(project, userEmail, onProgress) — exports to
+│                            ZIP, enforces 100 MB client-side limit, uploads via POST /v1/files/backups, writes a
+│                            doc in `backup_index`. On re-sync of the same project the previous file + index row
+│                            are deleted first. listRemoteBackups filters backup_index by the logged-in user.
+│                            downloadBackup fetches via /v1/files/:id; deleteBackup removes both the file
+│                            (DELETE /v1/files/:id) and the index row.
+├── settingsSync.ts          Settings sync via polling over the windlog `settings` collection. Doc keyed by the
+│                            logged-in user's id — on startSettingsSync, picks up the existing doc (creating one
+│                            if none), applies remote values, then polls every 30s comparing updatedAt. Local
+│                            changes are PUT'd with a 1s debounce; a remoteUpdate guard avoids echo loops.
+│                            stopSettingsSync tears everything down (AppLayout onUnmounted).
 └── undoManager.ts           useUndo composable (ref stack of UndoEntry). push/pop/clear/removeByPhoto used by
                              the viewer to undo photo moves (fromSlot → toSlot) and image edits (prevFull /
                              prevThumb blobs kept inline).
@@ -231,9 +227,8 @@ services/
 
 ```
 composables/
-├── useAuth.ts                Module-scope authenticated + currentUser refs. check() delegates to
-│                             authService.checkAuth and sets up onAuthStateChange once. sendOtp, verifyOtp,
-│                             logout, updateProfile.
+├── useAuth.ts                Module-scope authenticated + currentUser refs. check() reads the local session
+│                             (localStorage key fr_session_v2). login(email, password), logout, updateProfile.
 ├── useProjects.ts            Module-scope projects ref + ready flag. load() boots db and hydrates projects,
 │                             saveProjectNow(project), createProject(name, mapId), deleteProject, getProject,
 │                             projectStats, photosInSlot. Auto-fills missing slots via defaultPhoto when needed.
@@ -298,8 +293,10 @@ components/
 ```
 pages/
 ├── Auth/
-│   └── AuthPage.vue              Fullscreen login (public). Supabase email OTP flow via authService:
-│                                  sendOtp → verifyOtp. Once authenticated, the router guard forwards to /.
+│   └── AuthPage.vue              Fullscreen login (public). Two steps: (1) email + password — on first login the
+│                                  entered password is set, on subsequent logins it is verified. (2) name prompt
+│                                  shown only when the user record has no name yet. Once authenticated, the router
+│                                  guard forwards to /.
 ├── Home/
 │   └── HomePage.vue              Home screen. Lists recent projects + quick actions (new project, open
 │                                  maps/settings). isHome in the router meta hides the toolbar back button
@@ -331,13 +328,10 @@ pages/
 │   └── SettingsPage.vue          Settings: language preference, UI density (ui), user name/email
 │                                  (useSettings), authentication actions (logout), link to access control,
 │                                  export layout preference, destructive actions (clear data).
-├── AccessControl/
-│   └── AccessControlPage.vue     Admin-only (isAdmin). CRUD of fr_access rows — invite, revoke, restore
-│                                  emails. Non-admins never reach it (router redirects or empty state).
-└── Download/
-    └── DownloadPage.vue          Public fullscreen download confirmation. Opened from the fr_temp_exports
-                                  link — looks up the signed URL and offers the ZIP for download without
-                                  requiring auth. Route meta.public = true so the router guard lets it through.
+└── AccessControl/
+    └── AccessControlPage.vue     Admin-only (isAdmin). CRUD of the `access` collection on windlog — invite,
+                                   revoke, restore emails. Non-admins never reach it (router redirects or empty
+                                   state).
 ```
 
 ---
@@ -348,10 +342,11 @@ pages/
 |---|---|
 | Vue 3 Composition API + composables | Shared reactive state lives in module-scope refs inside composables — simpler than Pinia for this scale and avoids an extra dependency |
 | `createWebHashHistory` | GitHub Pages serves a static site with no SPA fallback for nested paths; hash routes work without a server rewrite rule |
-| IndexedDB as the source of truth | Offline-first: full photo blobs + thumbs live on-device. Supabase is only for auth, settings sync, remote backups and short-lived exports |
+| IndexedDB as the source of truth | Offline-first: full photo blobs + thumbs live on-device. windlog is only for auth, access, settings sync and remote backups |
+| windlog API as the only backend | Generic JSON + file store — no server code of our own to maintain. Trade-off: no realtime, no signed URLs, no optimistic concurrency, no email. These were all cut from the product in the migration |
+| Password auth with client-side PBKDF2 hash | windlog has no built-in user auth; a hashed password per user in the `users` collection is enough for this app (no sensitive data) and avoids a second backend |
 | PrimeVue 4 + custom Aura preset | Aura themed with a greyscale primary ramp in main.ts; design tokens in styles/tokens.css drive everything else |
 | `vite-plugin-pwa` autoUpdate | New SW takes over automatically; no update prompt needed. Workbox precaches js/css/html/svg/json/fonts |
-| Supabase Edge Functions (Deno) for email | Sending email needs a secret (Resend API key) that can't live in the client. `send-export-link` is called on-demand; `notify-expiring-projects` runs on a schedule |
 | Hard-coded admin email | `ADMIN_EMAIL = '92ruas@gmail.com'` in accessService.ts — single-owner app; bootstraps the first admin without a seed migration |
 | i18n via plain Record maps | Flat key→string dictionaries in src/i18n/{pt,en}.ts; no runtime dep. Language auto-detected from navigator.language unless overridden in Settings |
 | Organization maps as static JSON | Maps are versioned product data, not user data — bundled under src/data/ and loaded by mapCatalog.ts. Creating/editing maps is not an in-app feature |
@@ -377,8 +372,8 @@ npm run preview
 Environment (`.env`, copied from `.env.example`):
 
 ```
-VITE_SUPABASE_URL=https://<project>.supabase.co
-VITE_SUPABASE_ANON_KEY=<anon-key>
+VITE_WINDLOG_URL=https://api.windlog.org
+VITE_WINDLOG_KEY=apidb_live_...
 ```
 
 Deployment to GitHub Pages is automatic on every push to `main` (see `.github/workflows/deploy.yml`). The same two secrets must be configured in the repo's **Settings → Secrets → Actions**.
@@ -392,3 +387,4 @@ Deployment to GitHub Pages is automatic on every push to `main` (see `.github/wo
 - **Styling** — use the design tokens in [tokens.css](src/styles/tokens.css); never hard-code colors or spacing in a scoped `<style>`.
 - **i18n** — every user-facing string goes through `useI18n().t(key)`; add the key to both pt.ts and en.ts in the same change.
 - **Persistence** — any write that must survive reload goes through [db.ts](src/services/db.ts), which drives [useSaveStatus](src/composables/useSaveStatus.ts).
+- **Remote API** — every windlog call goes through [windlog.ts](src/services/windlog.ts). Services on top (auth, access, settings, backup) never `fetch` directly.
