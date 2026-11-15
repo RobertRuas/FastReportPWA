@@ -25,13 +25,16 @@ FastReportPWA/
 │                             theme-color #2563EB), manifest + icons. Contains an inline splash screen
 │                             (#splash) with its own fade-in/out logic: window.__splashReady() is called from
 │                             src/main.ts after Vue mounts and fades the splash after at least 1s.
-├── vite.config.ts            Vite config. base is '/FastReportPWA/' when GITHUB_ACTIONS is set, else '/'. Loads
+├── vite.config.ts            Vite config. base is '/FastReportPWA/' when GITHUB_ACTIONS is set, else '/'. `define`
+│                             injects __BUILD_TIME__ (ISO build timestamp = deploy time, shown in the Home
+│                             footer) and __IS_GITHUB_BUILD__; both declared in env.d.ts. Loads
 │                             the vue plugin and VitePWA (autoUpdate, globPatterns for js/css/html/svg/json/fonts,
 │                             navigateFallback index.html, denylist /^\/api/). '@' alias → './src'.
 ├── tsconfig.json             References tsconfig.app.json + tsconfig.node.json.
 ├── tsconfig.app.json         TypeScript config for the app source (Vue 3 + DOM).
 ├── tsconfig.node.json        TypeScript config for the Vite config / Node tooling.
-├── env.d.ts                  Ambient types: `import.meta.env` for VITE_WINDLOG_URL, VITE_WINDLOG_KEY.
+├── env.d.ts                  Ambient types: `import.meta.env` for VITE_WINDLOG_URL, VITE_WINDLOG_KEY, plus the
+│                             build-time constants __BUILD_TIME__ and __IS_GITHUB_BUILD__.
 ├── .env.example              Template env file (never commit the real .env). Lists VITE_WINDLOG_URL and
 │                             VITE_WINDLOG_KEY.
 ├── .gitignore                Ignores node_modules, dist, .DS_Store, *.local, .env (except .env.example), .vite.
@@ -195,8 +198,9 @@ services/
 │                            (id, name, blob, url, width, height). generateThumb at THUMB_WIDTH 256 /
 │                            THUMB_QUALITY 0.75. revokeImageUrl(url) to release Object URLs.
 ├── photoEditor.ts           In-browser JPEG transforms backed by OffscreenCanvas (with fallback). rotate90cw,
-│                            rotate90ccw, mirrorH, mirrorV — each takes/returns a Blob at JPEG_QUALITY 0.85.
-│                            Used by the photo viewer's edit actions.
+│                            mirrorH and cropImage(blob, CropRect) — each takes/returns a Blob at
+│                            JPEG_QUALITY 0.85. CropRect is normalized (0..1) and clamped to the image bounds
+│                            with a 16px minimum. Used by the photo viewer's edit actions.
 ├── defaultPhoto.ts          addDefaultPhoto(projectId) — fetches assets/na.jpg, processes it through
 │                            imageProcessor, stores the blobs, returns a Photo pinned to the first slot. Used
 │                            when a slot requires a placeholder (project create / recovery).
@@ -277,8 +281,15 @@ components/
 │                             usePageActions override).
 ├── common/
 │   ├── ProjectTabs.vue       Tab strip switching between the Project Details / Project Review views.
-│   └── SwipeActions.vue      Touch gesture wrapper that reveals left/right action buttons on swipe. Used by
-│                             list rows (project lists, access control entries, …).
+│   ├── SwipeActions.vue      Touch gesture wrapper that reveals left/right action buttons on swipe. Used by
+│   │                         list rows (project lists, access control entries, …).
+│   ├── ToolIcon.vue          Inline SVG icon set for the photo viewer tools — props { name: 'undo' | 'flip' |
+│   │                         'crop' | 'rotate' | 'move' | 'delete', size? }. Drawn inline because PrimeIcons
+│   │                         has no distinct glyph for flip / crop / move-to-folder.
+│   └── CropOverlay.vue       Fullscreen crop editor — props { src, busy? }, emits cancel / apply(CropRect with
+│                             normalized 0..1 coords). Draggable frame with four corner handles, rule-of-thirds
+│                             guides, min size 8%, reset. Used by PhotoViewerPage; the crop itself is done by
+│                             photoEditor.cropImage.
 └── feedback/
     ├── ImportOverlay.vue     Fullscreen modal shown while usePhotoImport is running. Progress bar tied to
     │                         processedFiles / totalFiles + the current file name. Blocks input until done.
@@ -300,7 +311,8 @@ pages/
 ├── Home/
 │   └── HomePage.vue              Home screen. Lists recent projects + quick actions (new project, open
 │                                  maps/settings). isHome in the router meta hides the toolbar back button
-│                                  and adds the "+" header action in AppLayout.
+│                                  and adds the "+" header action in AppLayout. Footer shows storage used on
+│                                  the left and the last deploy date/time (__BUILD_TIME__) on the right.
 ├── NewProject/
 │   └── NewProjectPage.vue        Create-project form, powered by useProjectCreate. Picks a map, types a
 │                                  name (validated against existing slugs), then creates via useProjects
@@ -318,9 +330,11 @@ pages/
 │                                  useProjectSession for the open project.
 ├── PhotoViewer/
 │   └── PhotoViewerPage.vue       Fullscreen triage/view. Swipe between photos + hotkey classification per
-│                                  slot (hotkeys live in the map). Edit actions (rotate/mirror via
-│                                  photoEditor), undo (undoManager). The /projects/:id/triage route is this
-│                                  page.
+│                                  slot (hotkeys live in the map). Top toolbar has six tools (ToolIcon):
+│                                  undo, flip, crop, rotate, move, delete. Pixel edits all go through one
+│                                  applyEdit() helper (photoEditor + generateThumb + undoManager); crop opens
+│                                  CropOverlay; move opens the slot sheet (available in triage and review).
+│                                  The /projects/:id/triage route is this page.
 ├── Maps/
 │   └── MapsPage.vue              Read-only browser for the organization maps (inspection-t24,
 │                                  tendons-retrofit). Lists slots, groups, hotkeys, expected counts.

@@ -139,6 +139,24 @@ function formatBytes(bytes: number): string {
   return `${val.toFixed(i > 0 ? 1 : 0)} ${units[i]}`
 }
 
+/** Date/time of the last GitHub deploy, injected at build time. */
+const deployedAt = computed(() => {
+  const d = new Date(__BUILD_TIME__)
+  if (isNaN(d.getTime())) return ''
+  const locale = lang.value === 'pt' ? 'pt-PT' : 'en-GB'
+  return d.toLocaleString(locale, {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+})
+
+const deployLabel = computed(() =>
+  __IS_GITHUB_BUILD__ ? t('home.deploy.last') : t('home.deploy.unknown')
+)
+
 function projectProgress(project: typeof projects.value[0]): number {
   const stats = projectStats(project)
   if (stats.total === 0) return 0
@@ -340,6 +358,10 @@ function onDeleteProject(project: typeof projects.value[0]) {
       <span class="storage-info">
         <i class="pi pi-database"></i>
         {{ formatBytes(totalBytes) }} {{ t('home.storage.used') }}
+      </span>
+      <span v-if="deployedAt" class="deploy-info" :title="`${deployLabel}: ${deployedAt}`">
+        <i class="pi pi-github"></i>
+        {{ deployedAt }}
       </span>
     </div>
 
@@ -696,13 +718,23 @@ function onDeleteProject(project: typeof projects.value[0]) {
   color: var(--color-text-secondary);
 }
 
-.storage-info {
+.storage-info,
+.deploy-info {
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
+  min-width: 0;
 }
 
-.storage-info i {
+.deploy-info {
+  margin-left: auto;
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.storage-info i,
+.deploy-info i {
   font-size: 12px;
 }
 </style>

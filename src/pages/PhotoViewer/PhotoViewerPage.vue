@@ -6,13 +6,15 @@ import { usePhotoStore } from '@/composables/usePhotoStore'
 import { useProjects } from '@/composables/useProjects'
 import { useI18n } from '@/composables/useI18n'
 import { useUndo } from '@/services/undoManager'
-import { rotate90cw, mirrorH } from '@/services/photoEditor'
+import { rotate90cw, mirrorH, cropImage, type CropRect } from '@/services/photoEditor'
 import { generateThumb } from '@/services/imageProcessor'
 import * as db from '@/services/db'
 import {
   getGroups, getSlotsForGroup, hasGroups,
   getClassifiableSlots, getTrashSlot
 } from '@/services/mapCatalog'
+import ToolIcon from '@/components/common/ToolIcon.vue'
+import CropOverlay from '@/components/common/CropOverlay.vue'
 import type { Slot } from '@/models/types'
 
 const route = useRoute()
@@ -30,6 +32,7 @@ const slideDir = ref<'next' | 'prev'>('next')
 const activeGroup = ref<string | null>(null)
 const busy = ref(false)
 const showMoveOverlay = ref(false)
+const showCropOverlay = ref(false)
 
 const scopeSlot = computed(() => (route.query.slot as string) || null)
 const startPhotoId = computed(() => (route.query.photo as string) || null)
@@ -192,57 +195,60 @@ function onUndo() {
   }
 }
 
-async function onRotate() {
+/**
+ * Runs a pixel transform on the current photo: stores the previous blobs on the
+ * undo stack, writes the new full + thumb and keeps photo.w / photo.h in sync.
+ */
+async function applyEdit(transform: (full: Blob) => Promise<Blob>) {
   if (busy.value || !currentPhoto.value || !project.value) return
   busy.value = true
 
-  const photo = currentPhoto.value
-  const blobRecord = await db.getBlob(photo.id)
-  if (!blobRecord) { busy.value = false; return }
+  try {
+    const photo = currentPhoto.value
+    const blobRecord = await db.getBlob(photo.id)
+    if (!blobRecord) return
 
-  const rotated = await rotate90cw(blobRecord.full)
-  const thumb = await generateThumb(rotated)
+    const edited = await transform(blobRecord.full)
+    const thumb = await generateThumb(edited)
 
-  undoPush({
-    type: 'image',
-    photoId: photo.id,
-    fromSlot: photo.slot,
-    toSlot: photo.slot,
-    prevFull: blobRecord.full,
-    prevThumb: blobRecord.thumb
-  })
+    undoPush({
+      type: 'image',
+      photoId: photo.id,
+      fromSlot: photo.slot,
+      toSlot: photo.slot,
+      prevFull: blobRecord.full,
+      prevThumb: blobRecord.thumb
+    })
 
-  await updateBlobs(photo.id, project.value.id, rotated, thumb)
-  const tmp = photo.w
-  photo.w = photo.h
-  photo.h = tmp
-  touchProject(project.value)
-  busy.value = false
+    await updateBlobs(photo.id, project.value.id, edited, thumb)
+
+    const bitmap = await createImageBitmap(edited)
+    photo.w = bitmap.width
+    photo.h = bitmap.height
+    bitmap.close()
+
+    touchProject(project.value)
+  } finally {
+    busy.value = false
+  }
 }
 
-async function onMirror() {
-  if (busy.value || !currentPhoto.value || !project.value) return
-  busy.value = true
+function onRotate() {
+  return applyEdit(rotate90cw)
+}
 
-  const photo = currentPhoto.value
-  const blobRecord = await db.getBlob(photo.id)
-  if (!blobRecord) { busy.value = false; return }
+function onFlip() {
+  return applyEdit(mirrorH)
+}
 
-  const mirrored = await mirrorH(blobRecord.full)
-  const thumb = await generateThumb(mirrored)
+function openCropOverlay() {
+  if (busy.value || allDone.value || !currentUrl.value) return
+  showCropOverlay.value = true
+}
 
-  undoPush({
-    type: 'image',
-    photoId: photo.id,
-    fromSlot: photo.slot,
-    toSlot: photo.slot,
-    prevFull: blobRecord.full,
-    prevThumb: blobRecord.thumb
-  })
-
-  await updateBlobs(photo.id, project.value.id, mirrored, thumb)
-  touchProject(project.value)
-  busy.value = false
+async function onCropApply(rect: CropRect) {
+  await applyEdit(full => cropImage(full, rect))
+  showCropOverlay.value = false
 }
 
 // --- Swipe navigation ---
@@ -331,7 +337,7 @@ const moveTargetSlots = computed(() => {
 })
 
 function openMoveOverlay() {
-  if (!isReviewMode.value || allDone.value) return
+  if (busy.value || allDone.value) return
   showMoveOverlay.value = true
 }
 
@@ -370,20 +376,59 @@ function goToReview() {
         <i class="pi pi-times"></i>
       </button>
       <div class="vt-right">
-        <button class="vt-btn" :class="{ 'vt-btn-disabled': !canUndo }" aria-label="Desfazer" @click="onUndo">
-          <i class="pi pi-undo"></i>
+        <button
+          class="vt-btn"
+          :class="{ 'vt-btn-disabled': !canUndo || busy }"
+          :title="t('viewer.undo')"
+          :aria-label="t('viewer.undo')"
+          @click="onUndo"
+        >
+          <ToolIcon name="undo" />
         </button>
-        <button class="vt-btn" :class="{ 'vt-btn-disabled': allDone }" aria-label="Espelhar" @click="onMirror">
-          <i class="pi pi-arrows-h"></i>
+        <button
+          class="vt-btn"
+          :class="{ 'vt-btn-disabled': allDone || busy }"
+          :title="t('viewer.flip')"
+          :aria-label="t('viewer.flip')"
+          @click="onFlip"
+        >
+          <ToolIcon name="flip" />
         </button>
-        <button class="vt-btn" :class="{ 'vt-btn-disabled': allDone }" aria-label="Rodar" @click="onRotate">
-          <i class="pi pi-refresh"></i>
+        <button
+          class="vt-btn"
+          :class="{ 'vt-btn-disabled': allDone || busy }"
+          :title="t('viewer.crop')"
+          :aria-label="t('viewer.crop')"
+          @click="openCropOverlay"
+        >
+          <ToolIcon name="crop" />
         </button>
-        <button v-if="isReviewMode" class="vt-btn" :class="{ 'vt-btn-disabled': allDone }" aria-label="Mover para" @click="openMoveOverlay">
-          <i class="pi pi-folder-open"></i>
+        <button
+          class="vt-btn"
+          :class="{ 'vt-btn-disabled': allDone || busy }"
+          :title="t('viewer.rotate')"
+          :aria-label="t('viewer.rotate')"
+          @click="onRotate"
+        >
+          <ToolIcon name="rotate" />
         </button>
-        <button class="vt-btn vt-btn-danger" :class="{ 'vt-btn-disabled': allDone }" aria-label="Lixeira" @click="onTrash">
-          <i class="pi pi-trash"></i>
+        <button
+          class="vt-btn"
+          :class="{ 'vt-btn-disabled': allDone || busy }"
+          :title="t('viewer.move')"
+          :aria-label="t('viewer.move')"
+          @click="openMoveOverlay"
+        >
+          <ToolIcon name="move" />
+        </button>
+        <button
+          class="vt-btn vt-btn-danger"
+          :class="{ 'vt-btn-disabled': allDone || busy }"
+          :title="t('viewer.delete')"
+          :aria-label="t('viewer.delete')"
+          @click="onTrash"
+        >
+          <ToolIcon name="delete" />
         </button>
         <span v-if="activeGroup" class="vt-group" :style="{ color: activeGroupColor, background: activeGroupColor + '1a' }">
           {{ activeGroup }}
@@ -516,6 +561,15 @@ function goToReview() {
       </div>
     </template>
 
+    <!-- Crop overlay -->
+    <CropOverlay
+      v-if="showCropOverlay && currentUrl"
+      :src="currentUrl"
+      :busy="busy"
+      @cancel="showCropOverlay = false"
+      @apply="onCropApply"
+    />
+
     <!-- Move overlay -->
     <Transition name="modal-fade">
       <div v-if="showMoveOverlay" class="move-backdrop" @click.self="showMoveOverlay = false">
@@ -569,14 +623,15 @@ function goToReview() {
 .vt-right {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 1px;
+  min-width: 0;
 }
 
 .vt-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
+  width: 36px;
   height: 40px;
   border: none;
   background: var(--color-bg-secondary);
@@ -584,7 +639,14 @@ function goToReview() {
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 15px;
+  flex-shrink: 0;
   -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 360px) {
+  .vt-btn {
+    width: 32px;
+  }
 }
 
 .vt-btn:active {
@@ -601,19 +663,23 @@ function goToReview() {
 }
 
 .vt-group {
-  font-size: var(--font-size-xs);
+  font-size: 10px;
   font-weight: 600;
-  padding: 2px 8px;
+  padding: 2px 5px;
+  margin-left: 2px;
   border-radius: var(--radius-sm);
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .vt-counter {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   font-weight: 600;
   color: var(--color-text-secondary);
-  min-width: 40px;
+  min-width: 30px;
   text-align: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* --- Image Area --- */

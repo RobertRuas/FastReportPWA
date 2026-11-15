@@ -9,6 +9,24 @@ export interface PatchNote {
 
 export const patchNotes: PatchNote[] = [
   {
+    version: '2026.11.15',
+    date: '2026-11-15',
+    items: {
+      pt: [
+        'Barra do visualizador de fotos refeita: desfazer, espelhar, recortar, rodar, mover e excluir — cada um com o seu próprio ícone.',
+        'Novo recorte de fotos com moldura ajustável pelos cantos.',
+        'Mover para outro slot passa a estar disponível também durante a triagem.',
+        'Rodapé da página inicial mostra a data e hora do último deploy, à direita do espaço utilizado.'
+      ],
+      en: [
+        'Photo viewer toolbar rebuilt: undo, flip, crop, rotate, move and delete — each with its own icon.',
+        'New photo crop with a frame you drag by the corners.',
+        'Move to another slot is now available during triage too.',
+        'Home footer shows the last deploy date and time, right of the storage used.'
+      ]
+    }
+  },
+  {
     version: '2026.11.13',
     date: '2026-11-13',
     items: {

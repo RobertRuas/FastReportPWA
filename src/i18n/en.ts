@@ -31,6 +31,8 @@ export default {
   'home.badge.exported': 'Exported',
   'home.badge.pending': 'Pending',
   'home.storage.used': 'Used',
+  'home.deploy.last': 'Last deploy',
+  'home.deploy.unknown': 'local build',
   'home.photos': '{count} photos',
   'home.toSort': '{count} to sort',
 
@@ -104,6 +106,18 @@ export default {
   // Viewer
   'viewer.moveTo': 'Move to',
   'viewer.moveClose': 'Close',
+  'viewer.undo': 'Undo',
+  'viewer.flip': 'Flip',
+  'viewer.crop': 'Crop',
+  'viewer.rotate': 'Rotate',
+  'viewer.move': 'Move',
+  'viewer.delete': 'Delete',
+
+  // Crop
+  'crop.title': 'Crop photo',
+  'crop.apply': 'Apply',
+  'crop.reset': 'Reset',
+  'crop.hint': 'Drag the corners to set the area to keep.',
 
   // Export
   'export.title': 'Export ZIP',
