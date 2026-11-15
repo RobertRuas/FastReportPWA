@@ -15,6 +15,7 @@ import { importBackupZip } from '@/services/zipImportService'
 import { getAllMaps, getMap } from '@/services/mapCatalog'
 import { useZipImport } from '@/composables/useZipImport'
 import SwipeActions from '@/components/common/SwipeActions.vue'
+import StructureHelp from '@/components/common/StructureHelp.vue'
 import type { SwipeAction } from '@/components/common/SwipeActions.vue'
 import * as db from '@/services/db'
 
@@ -365,6 +366,8 @@ function onDeleteProject(project: typeof projects.value[0]) {
       </span>
     </div>
 
+    <StructureHelp class="home-help" />
+
   </div>
 </template>
 
@@ -378,21 +381,20 @@ function onDeleteProject(project: typeof projects.value[0]) {
 /* --- Summary Cards --- */
 .cards-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--spacing-sm);
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
 }
 
 .summary-card {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  align-items: center;
+  gap: 3px;
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  padding: var(--spacing-md);
-  min-height: 80px;
+  padding: var(--spacing-sm) 2px;
   cursor: pointer;
-  text-align: left;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -402,33 +404,41 @@ function onDeleteProject(project: typeof projects.value[0]) {
 
 .card-top {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-xs);
 }
 
 .card-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  font-size: 13px;
+  font-size: 11px;
   flex-shrink: 0;
 }
 
 .card-count {
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--color-text-primary);
   line-height: 1;
 }
 
 .card-title {
-  font-size: var(--font-size-xs);
+  font-size: 10px;
   font-weight: 500;
   color: var(--color-text-secondary);
-  margin-top: var(--spacing-xs);
+  line-height: 1.1;
+  text-align: center;
+}
+
+/* Very narrow screens can't fit four labels in a row */
+@media (max-width: 340px) {
+  .cards-grid {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 /* --- List Header --- */
@@ -736,5 +746,10 @@ function onDeleteProject(project: typeof projects.value[0]) {
 .storage-info i,
 .deploy-info i {
   font-size: 12px;
+}
+
+/* Sits right under the storage footer — pull it closer than the page gap */
+.home-help {
+  margin-top: calc(var(--spacing-md) - var(--spacing-xl));
 }
 </style>

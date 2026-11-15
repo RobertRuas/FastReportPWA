@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue'
-import { slugify } from '@/services/slugify'
+import { slugify, sanitizeProjectName } from '@/services/slugify'
 import { useProjects } from './useProjects'
 import { useI18n } from './useI18n'
 import { getAllMaps, getClassifiableSlots, hasGroups, getGroups } from '@/services/mapCatalog'
@@ -14,6 +14,28 @@ export function useProjectCreate() {
 
   const maps = getAllMaps()
   if (maps.length > 0) mapId.value = maps[0].id
+
+  const NAME_MAX_LENGTH = 60
+
+  /**
+   * Applies the project-name mask to what the user typed and keeps the caret
+   * where it was. Writes back to the input element because the sanitized value
+   * can be identical to the current state (a rejected keystroke), which would
+   * otherwise leave the stripped character visible in the DOM.
+   */
+  function maskNameInput(el: HTMLInputElement) {
+    const caret = el.selectionStart ?? el.value.length
+    const cleanBeforeCaret = sanitizeProjectName(el.value.slice(0, caret))
+    const clean = sanitizeProjectName(el.value).slice(0, NAME_MAX_LENGTH)
+
+    name.value = clean
+
+    if (el.value !== clean) {
+      el.value = clean
+      const pos = Math.min(cleanBeforeCaret.length, clean.length)
+      el.setSelectionRange(pos, pos)
+    }
+  }
 
   const slug = computed(() => slugify(name.value.trim()))
 
@@ -62,6 +84,8 @@ export function useProjectCreate() {
 
   return {
     name,
+    maskNameInput,
+    nameMaxLength: NAME_MAX_LENGTH,
     mapId,
     maps,
     slug,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import InputText from 'primevue/inputtext'
@@ -14,11 +14,21 @@ const { t, lang } = useI18n()
 const { setTitle } = usePageTitle()
 const { setActions } = usePageActions()
 const {
-  name, mapId, maps, slug, nameError,
+  name, maskNameInput, nameMaxLength, mapId, maps, nameError,
   canCreate, filenamePreview, mapSummary, create
 } = useProjectCreate()
 
 setTitle(t('new.title'))
+
+// The placeholder carries a {date} token — fill it with today's date so the
+// example shows the real format instead of the raw token.
+const namePlaceholder = computed(() =>
+  t('new.namePlaceholder', { date: new Date().toISOString().slice(0, 10) })
+)
+
+function onNameInput(e: Event) {
+  maskNameInput(e.target as HTMLInputElement)
+}
 
 async function onSubmit() {
   if (!canCreate.value) return
@@ -53,11 +63,15 @@ onMounted(() => {
       <label class="form-label" for="project-name">{{ t('new.name') }}</label>
       <InputText
         id="project-name"
-        v-model="name"
+        :value="name"
         class="project-name-input"
-        :placeholder="t('new.namePlaceholder')"
-        autocapitalize="words"
+        :placeholder="namePlaceholder"
+        :maxlength="nameMaxLength"
+        autocapitalize="characters"
         autocomplete="off"
+        autocorrect="off"
+        spellcheck="false"
+        @input="onNameInput"
         @keydown.enter="onSubmit"
       />
       <span v-if="nameError" class="form-error">{{ nameError }}</span>
@@ -65,6 +79,7 @@ onMounted(() => {
         <i class="pi pi-file"></i>
         {{ filenamePreview }}
       </span>
+      <span class="form-hint form-hint-mask">{{ t('new.nameMask') }}</span>
     </div>
 
     <div class="form-field">
@@ -129,6 +144,10 @@ onMounted(() => {
 
 .form-hint i {
   font-size: 11px;
+}
+
+.form-hint-mask {
+  opacity: 0.75;
 }
 
 /* --- Map Selection --- */

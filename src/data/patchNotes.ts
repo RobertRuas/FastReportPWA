@@ -9,6 +9,24 @@ export interface PatchNote {
 
 export const patchNotes: PatchNote[] = [
   {
+    version: '2026.11.15.2',
+    date: '2026-11-15',
+    items: {
+      pt: [
+        'Cards do resumo da página inicial mais pequenos — os quatro passam a caber numa só linha.',
+        'Novo projeto: corrigido o texto de exemplo do nome, que mostrava "{date}" em vez da data.',
+        'Novo projeto: o nome é agora escrito em maiúsculas e sem acentos nem caracteres especiais, à medida que escreve.',
+        'Nota discreta no fundo da página inicial a explicar como se estrutura um projeto.'
+      ],
+      en: [
+        'Smaller summary cards on the home screen — all four now fit in one row.',
+        'New project: fixed the name example, which showed "{date}" instead of the date.',
+        'New project: the name is now typed in uppercase with no accents or special characters.',
+        'Discreet note at the bottom of the home screen explaining how a project is structured.'
+      ]
+    }
+  },
+  {
     version: '2026.11.15.1',
     date: '2026-11-15',
     items: {

@@ -192,7 +192,9 @@ services/
 │                            getMap(id), getSlot(map, slotId), plus helpers getClassifiableSlots, hasGroups,
 │                            getGroups used by the triage and review screens.
 ├── slugify.ts               slugify(name) — NFD strip accents → underscore-separate alphanumerics; used for
-│                            Project.slug and folder names in exports.
+│                            Project.slug and folder names in exports. Also sanitizeProjectName(input) — the
+│                            project-name input mask: folds accents, uppercases and keeps only A-Z 0-9, space,
+│                            hyphen and underscore.
 ├── fileNamer.ts             slotFileToken(slot), slotPath(slot), nextIndex(photos, slotId) — rules for naming
 │                            photo files when exporting (<slotFileToken>_<index>.jpg) and for the folder layout
 │                            inside the ZIP.
@@ -249,7 +251,9 @@ composables/
 │                             progress, totalFiles, processedFiles, currentFileName — surfaced by ImportOverlay.
 │                             Hands the blobs to usePhotoStore().addPhotosToInbox.
 ├── useProjectCreate.ts       Form model for NewProjectPage. name, mapId refs, derived slug (slugify),
-│                             nameError (duplicate check against existing projects), create().
+│                             nameError (duplicate check against existing projects), create(). The name field
+│                             is masked as the user types by maskNameInput(el) (sanitizeProjectName +
+│                             nameMaxLength 60, caret preserved) — the page binds :value/@input, not v-model.
 ├── useProjectSession.ts      Currently-open project state. currentProjectId ref, derived project + map +
 │                             stats computeds. Owns the per-project Object-URL lifetime (loadProjectUrls on
 │                             enter, revokeAllUrls on exit).
@@ -291,10 +295,13 @@ components/
 │   ├── ToolIcon.vue          Inline SVG icon set for the photo viewer tools — props { name: 'undo' | 'flip' |
 │   │                         'crop' | 'rotate' | 'move' | 'delete', size? }. Drawn inline because PrimeIcons
 │   │                         has no distinct glyph for flip / crop / move-to-folder.
-│   └── CropOverlay.vue       Fullscreen crop editor — props { src, busy? }, emits cancel / apply(CropRect with
-│                             normalized 0..1 coords). Draggable frame with four corner handles, rule-of-thirds
-│                             guides, min size 8%, reset. Used by PhotoViewerPage; the crop itself is done by
-│                             photoEditor.cropImage.
+│   ├── CropOverlay.vue       Fullscreen crop editor — props { src, busy? }, emits cancel / apply(CropRect with
+│   │                         normalized 0..1 coords). Draggable frame with four corner handles, rule-of-thirds
+│   │                         guides, min size 8%, reset. Used by PhotoViewerPage; the crop itself is done by
+│   │                         photoEditor.cropImage.
+│   └── StructureHelp.vue     Collapsed-by-default <details> explaining the project structure (map → inbox →
+│                             triage → review → export → where data lives). Text comes from the
+│                             help.structure.* i18n keys. Mounted at the bottom of HomePage.
 └── feedback/
     ├── ImportOverlay.vue     Fullscreen modal shown while usePhotoImport is running. Progress bar tied to
     │                         processedFiles / totalFiles + the current file name. Blocks input until done.
@@ -317,11 +324,14 @@ pages/
 │   └── HomePage.vue              Home screen. Lists recent projects + quick actions (new project, open
 │                                  maps/settings). isHome in the router meta hides the toolbar back button
 │                                  and adds the "+" header action in AppLayout. Footer shows storage used on
-│                                  the left and the last deploy date/time (__BUILD_TIME__) on the right.
+│                                  the left and the last deploy date/time (__BUILD_TIME__) on the right, with
+│                                  StructureHelp below it. The four summary cards are a compact 4-up row
+│                                  (2-up under 340px).
 ├── NewProject/
 │   └── NewProjectPage.vue        Create-project form, powered by useProjectCreate. Picks a map, types a
-│                                  name (validated against existing slugs), then creates via useProjects
-│                                  and navigates to the project details.
+│                                  name (masked to uppercase/no accents, validated against existing slugs),
+│                                  then creates via useProjects and navigates to the project details. The
+│                                  name placeholder takes a {date} var — pass it or the token shows raw.
 ├── ProjectList/
 │   └── ProjectListPage.vue       Full list of all projects with filter/sort + swipe-to-delete (SwipeActions).
 │                                  Shows sync state (projectSyncState) when backupSync is set up.
