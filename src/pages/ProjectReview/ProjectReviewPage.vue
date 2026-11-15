@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, nextTick } from 'vue'
-import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
+import { computed, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
 import { usePageTitle } from '@/composables/usePageTitle'
@@ -13,8 +13,6 @@ import { useI18n } from '@/composables/useI18n'
 import { getClassifiableSlots, hasGroups, getGroups, getSlotsForGroup, getSlot as getMapSlot } from '@/services/mapCatalog'
 import ProjectTabs from '@/components/common/ProjectTabs.vue'
 import type { Slot, Photo } from '@/models/types'
-
-const scrollCache = new Map<string, number>()
 
 const route = useRoute()
 const router = useRouter()
@@ -31,43 +29,10 @@ const { t } = useI18n()
 const projectId = computed(() => route.params.id as string)
 const activeFilter = ref<string>('all')
 
-function getScrollContainer(): HTMLElement | null {
-  return document.querySelector('.app-content') as HTMLElement | null
-}
-
 onMounted(async () => {
   await openProject(projectId.value)
   if (project.value) {
     setTitle(project.value.name)
-  }
-  const saved = scrollCache.get(projectId.value)
-  if (!saved) return
-  await nextTick()
-  const el = getScrollContainer()
-  if (!el) return
-
-  // Wait until content has grown enough (thumbs render async),
-  // then restore. Give up after ~1s.
-  let attempts = 0
-  const maxAttempts = 60
-  const tryRestore = () => {
-    if (!el) return
-    if (el.scrollHeight >= saved + el.clientHeight || attempts >= maxAttempts) {
-      el.scrollTop = saved
-      return
-    }
-    attempts++
-    requestAnimationFrame(tryRestore)
-  }
-  requestAnimationFrame(tryRestore)
-})
-
-onBeforeRouteLeave((to) => {
-  const el = getScrollContainer()
-  if (el && to.name === 'triage') {
-    scrollCache.set(projectId.value, el.scrollTop)
-  } else {
-    scrollCache.delete(projectId.value)
   }
 })
 
@@ -75,8 +40,14 @@ function goToTriage() {
   router.push(`/projects/${projectId.value}/triage`)
 }
 
+// Child route: the viewer renders as an overlay on top of this page, so the
+// list is never unmounted and keeps its scroll position.
 function openViewer(slotId: string, photoId: string) {
-  router.push(`/projects/${projectId.value}/triage?slot=${slotId}&photo=${photoId}`)
+  router.push({
+    name: 'review-photo',
+    params: { id: projectId.value },
+    query: { slot: slotId, photo: photoId }
+  })
 }
 
 setActions([
@@ -581,6 +552,9 @@ function isSlotFull(slot: Slot, count: number): boolean {
   <div v-else class="not-found">
     <p>{{ t('project.notFound') }}</p>
   </div>
+
+  <!-- Photo viewer overlay (child route) — teleported to <body> -->
+  <router-view />
 </template>
 
 <style scoped>

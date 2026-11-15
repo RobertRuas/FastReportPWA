@@ -155,7 +155,10 @@ src/
                               static site with no SPA fallback for nested paths). Declares PageAction type and
                               RouteMeta augmentation (title, isHome, fullscreen, fallbackRoute, public, actions).
                               Routes: /auth, / (home), /projects/new, /projects/:id (details),
-                              /projects/:id/review, /projects/:id/triage (fullscreen), /projects/list, /maps,
+                              /projects/:id/review (with the CHILD route 'review-photo' at
+                              /projects/:id/review/photo?slot=&photo= — the viewer as an overlay over the
+                              list, see PhotoOverlayPage), /projects/:id/triage (fullscreen),
+                              /projects/list, /maps,
                               /settings, /settings/access, /download (public). beforeEach guard: calls
                               useAuth().check() once, allows public routes, else redirects to /auth when not
                               authenticated.
@@ -280,7 +283,9 @@ components/
 │                             + the list of PageActions for the current route (route.meta.actions or the
 │                             usePageActions override).
 ├── common/
-│   ├── ProjectTabs.vue       Tab strip switching between the Project Details / Project Review views.
+│   ├── ProjectTabs.vue       Tab strip switching between the Project Details / Project Review views. The
+│   │                         active tab is derived from route.matched, so it stays on Review while the
+│   │                         photo-viewer child route is open.
 │   ├── SwipeActions.vue      Touch gesture wrapper that reveals left/right action buttons on swipe. Used by
 │   │                         list rows (project lists, access control entries, …).
 │   ├── ToolIcon.vue          Inline SVG icon set for the photo viewer tools — props { name: 'undo' | 'flip' |
@@ -327,14 +332,24 @@ pages/
 ├── ProjectReview/
 │   └── ProjectReviewPage.vue     Per-slot review grid. Thumbnails per slot, drag to reorder, tap to open the
 │                                  PhotoViewer, batch move/delete, replace with default photo. Uses
-│                                  useProjectSession for the open project.
+│                                  useProjectSession for the open project. Tapping a thumb pushes the CHILD
+│                                  route 'review-photo' (?slot=&photo=) and renders it in a <router-view />
+│                                  at the template root, so this page is NEVER unmounted while a photo is
+│                                  open — that is what keeps the list's scroll position. Never reintroduce a
+│                                  scroll save/restore hack here.
 ├── PhotoViewer/
+│   ├── PhotoOverlayPage.vue      Child route of the review page. Wraps PhotoViewerPage in a
+│   │                             <Teleport to="body"> fullscreen fixed overlay (z-index --z-overlay) so the
+│   │                             review list underneath stays mounted and the .app-content scroll position is
+│   │                             untouched. No logic of its own — PhotoViewerPage reads :id from the parent
+│   │                             route and ?slot= / ?photo= from the query, as in the triage route.
 │   └── PhotoViewerPage.vue       Fullscreen triage/view. Swipe between photos + hotkey classification per
 │                                  slot (hotkeys live in the map). Top toolbar has six tools (ToolIcon):
 │                                  undo, flip, crop, rotate, move, delete. Pixel edits all go through one
 │                                  applyEdit() helper (photoEditor + generateThumb + undoManager); crop opens
 │                                  CropOverlay; move opens the slot sheet (available in triage and review).
-│                                  The /projects/:id/triage route is this page.
+│                                  The /projects/:id/triage route is this page, and PhotoOverlayPage reuses
+│                                  it as the review overlay.
 ├── Maps/
 │   └── MapsPage.vue              Read-only browser for the organization maps (inspection-t24,
 │                                  tendons-retrofit). Lists slots, groups, hotkeys, expected counts.

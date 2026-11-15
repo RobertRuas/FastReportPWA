@@ -13,8 +13,9 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 
+// matched covers the review page and its photo-viewer child route
 const activeTab = computed(() =>
-  route.name === 'project-review' ? 'review' : 'inbox'
+  route.matched.some(r => r.name === 'project-review') ? 'review' : 'inbox'
 )
 </script>
 

@@ -64,7 +64,21 @@ const routes: RouteRecordRaw[] = [
     meta: {
       title: 'Review',
       fallbackRoute: '/'
-    }
+    },
+    children: [
+      {
+        // Opens the photo viewer as an overlay ON TOP of the review list
+        // (?slot=&photo=). The list stays mounted, so its scroll position is
+        // never lost.
+        path: 'photo',
+        name: 'review-photo',
+        component: () => import('@/pages/PhotoViewer/PhotoOverlayPage.vue'),
+        meta: {
+          title: 'Review',
+          fallbackRoute: '/'
+        }
+      }
+    ]
   },
   {
     path: '/projects/:id/triage',

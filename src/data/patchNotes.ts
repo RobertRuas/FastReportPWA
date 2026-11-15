@@ -9,6 +9,20 @@ export interface PatchNote {
 
 export const patchNotes: PatchNote[] = [
   {
+    version: '2026.11.15.1',
+    date: '2026-11-15',
+    items: {
+      pt: [
+        'Review: ao fechar uma foto, a lista fica exatamente na posição onde estava. O visualizador passa a abrir por cima da grelha, em vez de a substituir e recarregar.',
+        'O filtro de grupo escolhido no Review deixa de se perder ao abrir e fechar uma foto.'
+      ],
+      en: [
+        'Review: closing a photo now leaves the list exactly where it was. The viewer opens on top of the grid instead of replacing and rebuilding it.',
+        'The group filter picked on Review is no longer lost when opening and closing a photo.'
+      ]
+    }
+  },
+  {
     version: '2026.11.15',
     date: '2026-11-15',
     items: {
